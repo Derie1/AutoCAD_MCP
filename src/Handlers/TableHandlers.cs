@@ -185,7 +185,11 @@ internal static class TableHandlers
                     var v = cell.Value;
                     return v is string s && s.Length == 0 ? null : JsonUtil.FromObject(v);
                 default:
-                    var text = cell.GetTextString(FormatOption.IgnoreMtextFormat);
+                    // Text: strip MTEXT codes. Numbers, dates, formula results: the text as displayed
+                    // with the cell's format (IgnoreMtextFormat would give full precision, "1.500000000000000").
+                    var text = cell.Value is string or null
+                        ? cell.GetTextString(FormatOption.IgnoreMtextFormat)
+                        : cell.GetTextString(FormatOption.FormatOptionNone);
                     return string.IsNullOrEmpty(text) ? null : text;
             }
         }

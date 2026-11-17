@@ -27,6 +27,9 @@ internal static class Routes
             // tables and attributes
             Route.Main("get_table", TableHandlers.GetTable),
             Route.Main("extract_block_attributes", TableHandlers.ExtractBlockAttributes),
+            Route.Main("set_table_cells", TableWriteHandlers.SetTableCells),
+            Route.Main("modify_table", TableWriteHandlers.ModifyTable),
+            Route.Main("create_table", TableWriteHandlers.CreateTable),
 
             // draw
             Route.Main("create_line", DrawHandlers.CreateLine),

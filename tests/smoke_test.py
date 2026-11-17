@@ -317,6 +317,8 @@ def main() -> int:
         test_edit.run(base, post, count, check)
         import test_draw
         test_draw.run(base, post, count, check)
+        import test_tablewrite
+        test_tablewrite.run(base, post, count, check)
     asyncio.run(test_mcp(args.port))
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1

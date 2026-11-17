@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.1.6"
+SERVER_VERSION = "0.1.7"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))
@@ -320,6 +320,71 @@ async def extract_block_attributes(
     """
     return await call("extract_block_attributes", blocks=blocks, tags=tags, layers=layers, space=space,
                       window=window, offset=offset, limit=limit)
+
+
+CellValue = str | float | int | None
+TableHandle = Annotated[str | None, Field(description=(
+    "Table handle (find_entities types=TABLE). Omit to use the one table the user has selected, "
+    "or the only table in the drawing."))]
+
+
+@mcp.tool()
+async def set_table_cells(
+    handle: TableHandle = None,
+    cells: Annotated[list[dict[str, Any]] | None, Field(description=(
+        'Single cells: [{"row": 2, "column": 1, "value": "5.5"}, ...] (0-based, as in get_table).'))] = None,
+    values: Annotated[list[list[CellValue]] | None, Field(description=(
+        "A block of values [[row1...], [row2...]] written from 'start'. Use instead of cells."))] = None,
+    start: Annotated[list[int] | None, Field(description=(
+        "[row, column] of the top-left cell for 'values'. Omit to start at the cells the user has selected in the table."))] = None,
+    add_rows: Annotated[bool, Field(description="Append rows (copying the last row's format) when values run past the end.")] = False,
+) -> dict[str, Any]:
+    """Fill cells of an AutoCAD table.
+
+    Values: text (MTEXT codes kept), numbers, "=formula" (e.g. "=Sum(B3:B5)"; columns are
+    letters, rows 1-based as AutoCAD shows them), or null to clear. Inside a merged range write to
+    its top-left cell. Locked cells (also cells linked to Excel) are never written: the call fails
+    with cell_locked, nothing changes, and the user must unlock them in AutoCAD first. Cells with
+    blocks are not overwritten. Read the table with get_table first. One undo step.
+    """
+    return await call("set_table_cells", handle=handle, cells=cells, values=values, start=start, add_rows=add_rows)
+
+
+@mcp.tool()
+async def modify_table(
+    operation: Annotated[str, Field(description=(
+        '"insert_rows", "delete_rows", "insert_columns", "delete_columns", "merge", "unmerge", '
+        '"set_column_width" or "set_row_height".'))],
+    handle: TableHandle = None,
+    at: Annotated[int, Field(ge=0, description=(
+        "Row/column index (0-based). insert: new rows/columns go before it; = row/column count appends."))] = 0,
+    count: Annotated[int, Field(ge=1)] = 1,
+    range: Annotated[list[int] | None, Field(description="merge/unmerge: [top_row, left_column, bottom_row, right_column].")] = None,
+    width: Annotated[float | None, Field(gt=0, description="Column width (insert_columns, set_column_width).")] = None,
+    height: Annotated[float | None, Field(gt=0, description="Row height (insert_rows, set_row_height).")] = None,
+) -> dict[str, Any]:
+    """Change the structure of an AutoCAD table: insert or delete rows and columns (new ones copy
+    the format of their neighbour), merge or unmerge cells, set column widths and row heights.
+    Deleting rows/columns with locked cells is refused. One undo step."""
+    return await call("modify_table", operation=operation, handle=handle, at=at, count=count, range=range,
+                      width=width, height=height)
+
+
+@mcp.tool()
+async def create_table(
+    position: Annotated[list[float], Field(description="Top-left corner [x, y].")],
+    data: Annotated[list[list[CellValue]], Field(description="Rows of cell values; the first row is the header when header is true.")],
+    title: Annotated[str | None, Field(description="Title row above the data, merged across all columns.")] = None,
+    header: Annotated[bool, Field(description="Format the first data row as the header.")] = True,
+    column_widths: Annotated[float | list[float] | None, Field(description="One width for all columns or one per column.")] = None,
+    row_height: Annotated[float | None, Field(gt=0)] = None,
+    style: Annotated[str | None, Field(description="Table style name (list_styles). Default: the current style.")] = None,
+    layer: Layer = None,
+) -> dict[str, Any]:
+    """Create an AutoCAD table from data, e.g. an equipment schedule. Values follow the rules of
+    set_table_cells (text, numbers, "=formula"). Returns the handle, size and bounds. One undo step."""
+    return await call("create_table", position=position, data=data, title=title, header=header,
+                      column_widths=column_widths, row_height=row_height, style=style, layer=layer)
 
 
 # ---------------------------------------------------------------- draw
