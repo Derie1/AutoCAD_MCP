@@ -1,0 +1,9 @@
+<Project>
+  <!-- Separate restore/intermediate folders per AutoCAD series, so R25 (net8) and
+       R26 (net10) builds do not overwrite each other's project.assets.json.
+       Must be set before Microsoft.Common.props, hence this file. -->
+  <PropertyGroup>
+    <AcadSeries Condition="'$(AcadSeries)' == ''">R25</AcadSeries>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\obj\$(AcadSeries)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

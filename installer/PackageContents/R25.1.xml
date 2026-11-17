@@ -1,0 +1,9 @@
+  <Components Description="AutoCAD 2026">
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R25.1" SeriesMax="R25.1" />
+    <ComponentEntry
+        AppName="AcadMcpBridge"
+        ModuleName="./Contents/R25/AcadMcpBridge.dll"
+        AppDescription="AutoCAD MCP Bridge"
+        LoadOnAutoCADStartup="True" />
+  </Components>
+
