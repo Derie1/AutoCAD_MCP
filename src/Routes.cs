@@ -30,6 +30,14 @@ internal static class Routes
 
             // draw
             Route.Main("create_line", DrawHandlers.CreateLine),
+            Route.Main("create_polyline", DrawHandlers.CreatePolyline),
+            Route.Main("create_circle", DrawHandlers.CreateCircle),
+            Route.Main("create_arc", DrawHandlers.CreateArc),
+            Route.Main("create_text", DrawHandlers.CreateText),
+            Route.Main("create_mtext", DrawHandlers.CreateMText),
+            Route.Main("create_dimension", DrawHandlers.CreateDimension),
+            Route.Main("insert_block", BlockHandlers.InsertBlock),
+            Route.Main("update_block_attributes", BlockHandlers.UpdateBlockAttributes),
 
             // edit
             Route.Async("undo", EditHandlers.Undo),

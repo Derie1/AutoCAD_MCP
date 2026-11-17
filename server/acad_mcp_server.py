@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.1.5"
+SERVER_VERSION = "0.1.6"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))
@@ -143,6 +143,12 @@ Color = Annotated[
 ]
 Layer = Annotated[str | None, Field(description="Existing layer name. Default: the current layer.")]
 NameList = str | list[str] | None
+Handles = Annotated[list[str] | None, Field(description="Entity handles to act on (from find_entities / get_selection). Use this OR filter.")]
+Filter = Annotated[dict[str, Any] | None, Field(description=(
+    "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, "
+    "space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."))]
+DryRun = Annotated[bool, Field(description="Change nothing; report how many and which objects would be affected.")]
+Confirm = Annotated[bool, Field(description="Required when objects are chosen by filter. Ask the user before bulk changes.")]
 
 
 # ---------------------------------------------------------------- query
@@ -328,6 +334,137 @@ async def create_line(start: Point, end: Point, layer: Layer = None, color: Colo
     return await call("create_line", start=start, end=end, layer=layer, color=color)
 
 
+@mcp.tool()
+async def create_polyline(
+    points: Annotated[list[list[float]], Field(min_length=2, description="Vertices [[x, y], ...].")],
+    closed: bool = False,
+    bulges: Annotated[list[float] | None, Field(description=(
+        "One bulge per vertex for the segment that starts there: 0 = straight, 1 = half circle "
+        "counter-clockwise, -1 = clockwise, tan(angle/4) in general."))] = None,
+    width: Annotated[float | None, Field(ge=0, description="Constant width.")] = None,
+    elevation: float | None = None,
+    layer: Layer = None,
+    color: Color = None,
+) -> dict[str, Any]:
+    """Draw a 2D polyline (LWPOLYLINE), optionally closed and with arc segments.
+    Returns the new entity with vertices, length and area (if closed). One undo step."""
+    return await call("create_polyline", points=points, closed=closed, bulges=bulges, width=width,
+                      elevation=elevation, layer=layer, color=color)
+
+
+@mcp.tool()
+async def create_circle(center: Point, radius: Annotated[float, Field(gt=0)], layer: Layer = None, color: Color = None) -> dict[str, Any]:
+    """Draw a circle. One undo step."""
+    return await call("create_circle", center=center, radius=radius, layer=layer, color=color)
+
+
+@mcp.tool()
+async def create_arc(
+    center: Annotated[list[float] | None, Field(description="With radius and angles.")] = None,
+    radius: Annotated[float | None, Field(gt=0)] = None,
+    start_angle_deg: Annotated[float | None, Field(description="0 = +X axis; the arc runs counter-clockwise to end_angle_deg.")] = None,
+    end_angle_deg: float | None = None,
+    points: Annotated[list[list[float]] | None, Field(description="Or three points [start, middle, end] on the arc.")] = None,
+    layer: Layer = None,
+    color: Color = None,
+) -> dict[str, Any]:
+    """Draw an arc from center + radius + start/end angles, or through three points. One undo step."""
+    return await call("create_arc", center=center, radius=radius, start_angle_deg=start_angle_deg,
+                      end_angle_deg=end_angle_deg, points=points, layer=layer, color=color)
+
+
+TextStyle = Annotated[str | None, Field(description="Text style name (list_styles). Default: the current style.")]
+Height = Annotated[float | None, Field(gt=0, description="Text height in drawing units. Default: TEXTSIZE.")]
+
+
+@mcp.tool()
+async def create_text(
+    text: str,
+    position: Point,
+    height: Height = None,
+    rotation_deg: float = 0,
+    justify: Annotated[str | None, Field(description=(
+        "Which point of the text sits at position: BaseLeft (default), BaseCenter, BaseRight, TopLeft, TopCenter, "
+        "TopRight, MiddleLeft, MiddleCenter, MiddleRight, BottomLeft, BottomCenter, BottomRight."))] = None,
+    style: TextStyle = None,
+    layer: Layer = None,
+    color: Color = None,
+) -> dict[str, Any]:
+    """Single-line text (TEXT). For several lines or formatting use create_mtext. One undo step."""
+    return await call("create_text", text=text, position=position, height=height, rotation_deg=rotation_deg,
+                      justify=justify, style=style, layer=layer, color=color)
+
+
+@mcp.tool()
+async def create_mtext(
+    text: Annotated[str, Field(description="Text; line breaks become paragraphs. MTEXT codes (\\P, {\\fArial;...}) are kept.")],
+    position: Point,
+    width: Annotated[float, Field(ge=0, description="Wrapping width; 0 = no wrapping.")] = 0,
+    height: Height = None,
+    rotation_deg: float = 0,
+    attachment: Annotated[str | None, Field(description="Which point sits at position: TopLeft (default), MiddleCenter, BottomRight, ...")] = None,
+    style: TextStyle = None,
+    layer: Layer = None,
+    color: Color = None,
+) -> dict[str, Any]:
+    """Multiline text (MTEXT). One undo step."""
+    return await call("create_mtext", text=text, position=position, width=width, height=height,
+                      rotation_deg=rotation_deg, attachment=attachment, style=style, layer=layer, color=color)
+
+
+@mcp.tool()
+async def create_dimension(
+    p1: Annotated[list[float], Field(description="First measured point.")],
+    p2: Annotated[list[float], Field(description="Second measured point.")],
+    dim_line_point: Annotated[list[float], Field(description="A point the dimension line passes through.")],
+    kind: Annotated[str, Field(description='"aligned" (parallel to p1-p2, default) or "linear" (horizontal by default, see angle_deg).')] = "aligned",
+    angle_deg: Annotated[float, Field(description="linear: dimension line angle; 0 = horizontal, 90 = vertical.")] = 0,
+    text_override: Annotated[str | None, Field(description='Replace the measured text; "<>" stands for the measurement.')] = None,
+    style: Annotated[str | None, Field(description="Dimension style name. Default: the current style.")] = None,
+    layer: Layer = None,
+    color: Color = None,
+) -> dict[str, Any]:
+    """Create a linear or aligned dimension. Returns it with the measurement. One undo step."""
+    return await call("create_dimension", p1=p1, p2=p2, dim_line_point=dim_line_point, kind=kind, angle_deg=angle_deg,
+                      text_override=text_override, style=style, layer=layer, color=color)
+
+
+@mcp.tool()
+async def insert_block(
+    name: Annotated[str, Field(description="Block defined in this drawing (list_blocks).")],
+    position: Point,
+    scale: Annotated[float | list[float], Field(description="Uniform factor or [x, y] / [x, y, z].")] = 1,
+    rotation_deg: float = 0,
+    attributes: Annotated[dict[str, str] | None, Field(description="{TAG: value}; tags not given get their default values.")] = None,
+    dynamic_properties: Annotated[dict[str, Any] | None, Field(description="Dynamic block properties {name: value} (see get_entity_properties).")] = None,
+    layer: Layer = None,
+    color: Color = None,
+) -> dict[str, Any]:
+    """Insert a block reference with attribute values and dynamic properties.
+    Unknown tags or properties are refused with the list of valid ones. One undo step."""
+    return await call("insert_block", name=name, position=position, scale=scale, rotation_deg=rotation_deg,
+                      attributes=attributes, dynamic_properties=dynamic_properties, layer=layer, color=color)
+
+
+@mcp.tool()
+async def update_block_attributes(
+    values: Annotated[dict[str, str] | None, Field(description="{TAG: value} applied to every chosen block (with handles or filter).")] = None,
+    handles: Handles = None,
+    filter: Filter = None,
+    updates: Annotated[list[dict[str, Any]] | None, Field(description=(
+        'Different values per block: [{"handle": "2A", "values": {"NAME": "P-1"}}, ...]. Use instead of values + handles/filter.'))] = None,
+    dry_run: DryRun = False,
+    confirm: Confirm = False,
+) -> dict[str, Any]:
+    """Change attribute values of block references, e.g. fill a schedule from user data.
+
+    Returns {blocks, attributes_changed} and lists tags that some blocks do not have.
+    Blocks on locked layers make the call fail. One undo step.
+    """
+    return await call("update_block_attributes", values=values, handles=handles, filter=filter, updates=updates,
+                      dry_run=dry_run, confirm=confirm)
+
+
 # ---------------------------------------------------------------- edit
 
 @mcp.tool()
@@ -341,12 +478,6 @@ async def undo(steps: Annotated[int, Field(ge=1, le=100, description="How many M
     return await call("undo", steps=steps)
 
 
-Handles = Annotated[list[str] | None, Field(description="Entity handles to act on (from find_entities / get_selection). Use this OR filter.")]
-Filter = Annotated[dict[str, Any] | None, Field(description=(
-    "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, "
-    "space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."))]
-DryRun = Annotated[bool, Field(description="Change nothing; report how many and which objects would be affected.")]
-Confirm = Annotated[bool, Field(description="Required when objects are chosen by filter. Ask the user before bulk changes.")]
 
 @mcp.tool()
 async def set_entity_properties(
