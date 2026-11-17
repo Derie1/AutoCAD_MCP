@@ -227,7 +227,8 @@ AutoCAD_MCP\
 - [x] `list_xrefs` — внешние ссылки, путь, статус (загружена / не найдена)
 - [x] `list_styles` — текстовые, размерные, табличные стили, типы линий
 - [x] `get_system_variable` — чтение любых переменных
-- [ ] `extract_block_attributes` — таблица атрибутов всех вставок блока(ов) → JSON/CSV (спецификации, однолинейные схемы)
+- [x] `get_table` — содержимое таблиц AutoCAD — 0.1.4
+- [x] `extract_block_attributes` — таблица атрибутов всех вставок блока(ов) → JSON/CSV (спецификации, однолинейные схемы)
 
 ### Этап 2 — «зрение»
 - [ ] `capture_view` — PNG текущего вида в чат (`Document.CapturePreviewImage` или `GraphicsSystem.View.GetSnapshot` — проверить, что даёт нормальное разрешение)
@@ -441,8 +442,22 @@ AutoCAD_MCP\
   - Маска текста должна охватывать переносы строк (MTEXT) — `RegexOptions.Singleline`.
   - `Table.GetTextString(r, c, i, …)` устарел; новый путь — `table.Cells[r, c].GetTextString(FormatOption)`.
   - Тестовый чертёж строится через COM (`testsixture.py`, pywin32 только в dev-venv,
-    `testsequirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC через SendCommand не проходит).
+    `tests
+equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC через SendCommand не проходит).
   - smoke-тест: 71/71 в 2026 и 2027.
+
+- 2026-11-17 — **шаг 3 сделан (0.1.4).** `get_table`: ячейки 2D-массивом (plain / raw / value), диапазон
+  строк и столбцов, объединения, формулы, заблокированные ячейки, блоки в ячейках с атрибутами, связи с
+  Excel, выделенные пользователем ячейки (`SubSelection`); больше 5000 ячеек — частями с подсказкой. Без
+  handle берёт единственную выделенную таблицу или единственную в чертеже. `extract_block_attributes` —
+  атрибуты блоков таблицей (столбцы = теги), фильтры как у `find_entities`. Находки:
+  - API таблиц снят из метаданных `AcDbMgd.dll` (MetadataLoadContext; XML-документация неполная):
+    новый путь — `table.Cells[r, c]` (`Cell`: `GetTextString(FormatOption)`, `Value`, `State`,
+    `Contents[i].Formula/HasFormula/BlockTableRecordId`, `GetMergeRange`, `IsLinked`, `DataType`).
+  - `IsMerged` / `GetMergeRange` верны только у левой верхней ячейки объединения — объединения
+    собираются один раз по всей таблице.
+  - Сразу после запуска AutoCAD COM-объект ещё не отдаёт `ActiveDocument` — фикстура ждёт.
+  - smoke-тест: 91/91 в 2026 и 2027.
 
 ## 9. Возможные усовершенствования
 - **Псевдотаблицы из линий и текстов** — распознавать сетку из отрезков/полилиний и тексты в ячейках,

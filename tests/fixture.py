@@ -39,8 +39,15 @@ def arr(values: list[float]) -> VARIANT:
 
 
 def active_document():
-    app = retry(lambda: win32com.client.GetActiveObject("AutoCAD.Application"))
-    return retry(lambda: app.ActiveDocument)
+    # Right after start-up AutoCAD's COM object may not expose ActiveDocument yet.
+    for i in range(60):
+        try:
+            app = retry(lambda: win32com.client.GetActiveObject("AutoCAD.Application"))
+            return retry(lambda: app.ActiveDocument)
+        except AttributeError:
+            if i == 59:
+                raise
+            time.sleep(1)
 
 
 def build_step2(doc) -> dict[str, Any]:
@@ -83,6 +90,45 @@ def build_step2(doc) -> dict[str, Any]:
         "circle_handle": retry(lambda: circle.Handle),
         "locked_line_handle": retry(lambda: locked_line.Handle),
     }
+
+
+def build_step3(doc) -> dict[str, Any]:
+    """Two AutoCAD tables (needs build_step2 first: uses block MCP_BLK).
+
+    Main table, 5 x 3 (Standard style: row 0 title, row 1 header):
+      0: "Equipment list" merged over the 3 columns
+      1: Tag | Power, kW | Qty
+      2: P-1 (bold MTEXT formatting) | 5.5 | 2
+      3: P-2 (content locked) | 7.5 | 1
+      4: Total | formula =2+3 | block MCP_BLK
+    Second table 2 x 2, so "the only table" lookups must ask for a handle.
+    """
+    ms = retry(lambda: doc.ModelSpace)
+    tb = retry(lambda: ms.AddTable(pt(0, -50), 5, 3, 8, 40))
+    try:
+        retry(lambda: tb.MergeCells(0, 0, 0, 2))
+    except pythoncom.com_error:
+        pass  # the Standard style may merge the title row already
+    texts = {
+        (0, 0): "Equipment list",
+        (1, 0): "Tag", (1, 1): "Power, kW", (1, 2): "Qty",
+        (2, 0): "{\\fArial|b1|i0|c0|p34;P-1}", (2, 1): "5.5", (2, 2): "2",
+        (3, 0): "P-2", (3, 1): "7.5", (3, 2): "1",
+        (4, 0): "Total",
+    }
+    for (r, c), text in texts.items():
+        retry(lambda r=r, c=c, text=text: tb.SetText(r, c, text))
+    retry(lambda: tb.SetFormula(4, 1, 0, "=2+3"))
+    blk_id = retry(lambda: doc.Blocks.Item("MCP_BLK").ObjectID)
+    try:
+        retry(lambda: tb.SetBlockTableRecordId(4, 2, blk_id, True))
+    except (pythoncom.com_error, AttributeError):
+        retry(lambda: tb.SetBlockTableRecordId32(4, 2, blk_id, True))
+    retry(lambda: tb.SetCellState(3, 0, 1))  # acCellStateContentLocked
+
+    small = retry(lambda: ms.AddTable(pt(200, -50), 2, 2, 8, 30))
+    retry(lambda: small.SetText(1, 0, "x"))
+    return {"table_handle": retry(lambda: tb.Handle), "small_table_handle": retry(lambda: small.Handle)}
 
 
 def select_all(doc) -> None:

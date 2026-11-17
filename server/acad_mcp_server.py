@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.1.3"
+SERVER_VERSION = "0.1.4"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))
@@ -263,6 +263,57 @@ async def list_styles(
     """Named styles of the drawing with the current one marked. Text styles include font,
     height, width factor and oblique angle; dimension styles text height, arrow size, scale."""
     return await call("list_styles", kinds=kinds)
+
+
+# ---------------------------------------------------------------- tables and attributes
+
+Range = Annotated[list[int] | None, Field(min_length=1, max_length=2, description="[first, last], 0-based, inclusive.")]
+
+
+@mcp.tool()
+async def get_table(
+    handle: Annotated[str | None, Field(description=(
+        "Handle of the AutoCAD table (find_entities types=TABLE). Omit to use the one table the user has "
+        "selected, or the only table in the drawing."))] = None,
+    rows: Range = None,
+    columns: Range = None,
+    format: Annotated[str, Field(description=(
+        '"plain" (default): displayed text without formatting codes; "raw": text with MTEXT formatting codes; '
+        '"value": typed values (numbers stay numbers).'))] = "plain",
+    details: Annotated[bool, Field(description="Return each cell as an object {value, formula, locked, linked, merged_into, data_type}.")] = False,
+) -> dict[str, Any]:
+    """Read the contents of an AutoCAD table (ACAD_TABLE).
+
+    Returns rows/columns count, range read, cells as a 2D array [row][column] (0-based; row 0 is
+    usually the title, row 1 the header; see row_styles: _TITLE/_HEADER/_DATA), row_heights,
+    column_widths, merged ranges [top, left, bottom, right] (only the top-left cell of a merged
+    range has the value, the others are null), formulas [{row, column, formula, value}],
+    locked_cells (content locked or read-only, e.g. linked to Excel: they cannot be written),
+    block_cells (block name and attribute values), data_links and, if the user has selected
+    cells inside the table, selected_cells. Tables over 5000 cells are returned in parts:
+    "truncated" is true and "hint" says which rows to read next.
+    """
+    return await call("get_table", handle=handle, rows=rows, columns=columns, format=format, details=details)
+
+
+@mcp.tool()
+async def extract_block_attributes(
+    blocks: Annotated[NameList, Field(description="Block names, wildcards allowed. Default: all blocks with attributes.")] = None,
+    tags: Annotated[list[str] | None, Field(description="Only these attribute tags (columns). Default: all tags found.")] = None,
+    layers: Annotated[NameList, Field(description="Layer filter, wildcards allowed.")] = None,
+    space: Annotated[str, Field(description='"all" (default), "model", "paper" or a layout name.')] = "all",
+    window: Annotated[dict[str, Any] | None, Field(description='{"min": [x, y], "max": [x, y], "mode": "inside" | "crossing"}')] = None,
+    offset: Annotated[int, Field(ge=0)] = 0,
+    limit: Annotated[int, Field(ge=1, le=5000)] = 500,
+) -> dict[str, Any]:
+    """Attribute values of block references as a table, e.g. for a schedule or an Excel export.
+
+    Returns {total, offset, count, has_more, columns, rows}: columns are handle, block, space,
+    layer, position and then one column per attribute tag; rows hold the values (null when a
+    block has no such tag). Read-only.
+    """
+    return await call("extract_block_attributes", blocks=blocks, tags=tags, layers=layers, space=space,
+                      window=window, offset=offset, limit=limit)
 
 
 # ---------------------------------------------------------------- draw

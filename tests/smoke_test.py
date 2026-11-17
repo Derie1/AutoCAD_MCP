@@ -84,7 +84,8 @@ def test_concurrency(base: str, n: int = 100) -> None:
 
 
 READ_ONLY_TOOLS = {"health_check", "get_document_info", "find_entities", "get_selection", "list_documents",
-                   "list_layers", "list_blocks", "list_layouts", "list_xrefs", "list_styles"}
+                   "list_layers", "list_blocks", "list_layouts", "list_xrefs", "list_styles",
+                   "extract_block_attributes"}
 
 
 def post(base: str, route: str, **args) -> tuple[int, dict]:
@@ -226,6 +227,58 @@ def test_read(base: str) -> None:
     fixture.clear_selection(doc)
 
 
+def test_tables(base: str) -> None:
+    print("Tables and attributes (step 3) on a COM-built fixture")
+    import fixture
+    doc = fixture.active_document()
+    fx = fixture.build_step3(doc)
+    h = fx["table_handle"]
+
+    check("find types=TABLE -> 2", count(base, types="TABLE") == 2)
+    check("find text=*kW* finds the table", count(base, types="TABLE", text="*kW*") == 1)
+
+    s, r = post(base, "get_table", handle=h)
+    cells = r.get("cells", [])
+    check("get_table ok, 5 x 3", s == 200 and r.get("rows") == 5 and r.get("columns") == 3 and len(cells) == 5, str(r)[:400])
+    if len(cells) < 5:
+        return
+    check("title in [0][0], merged cells null", cells[0][0] == "Equipment list" and cells[0][1] is None and cells[0][2] is None, str(cells[0]))
+    check("merged range [0,0,0,2]", [0, 0, 0, 2] in r.get("merged", []), str(r.get("merged")))
+    check("header row", cells[1] == ["Tag", "Power, kW", "Qty"], str(cells[1]))
+    check("plain text drops MTEXT codes", cells[2][0] == "P-1", str(cells[2]))
+    check("row styles title/header/data", r.get("row_styles", [])[:3] == ["_TITLE", "_HEADER", "_DATA"], str(r.get("row_styles")))
+    f = r.get("formulas", [])
+    check("formula =2+3 with value 5", f and f[0].get("row") == 4 and f[0].get("column") == 1
+          and "2+3" in (f[0].get("formula") or "") and "5" in str(f[0].get("value")), str(f))
+    lk = r.get("locked_cells", [])
+    check("locked cell (3,0)", any(x.get("row") == 3 and x.get("column") == 0 for x in lk), str(lk))
+    bc = r.get("block_cells", [])
+    check("block cell (4,2) MCP_BLK", any(x.get("row") == 4 and x.get("column") == 2 and x.get("block") == "MCP_BLK" for x in bc), str(bc))
+
+    _, raw = post(base, "get_table", handle=h, rows=[2, 2], columns=[0, 0], format="raw")
+    raw_text = (raw.get("cells") or [[""]])[0][0] or ""
+    check("raw format keeps codes", raw_text.startswith("{" + chr(92) + "f"), raw_text)
+    _, val = post(base, "get_table", handle=h, rows=[2, 3], columns=[1, 2], format="value")
+    check("range read 2x2", val.get("range") == {"rows": [2, 3], "columns": [1, 2]} and len(val.get("cells", [])) == 2, str(val)[:300])
+    _, det = post(base, "get_table", handle=h, rows=[0, 4], columns=[0, 2], details=True)
+    dc = det.get("cells", [[{}] * 3] * 5)
+    check("details: merged_into and locked", dc[0][1].get("merged_into") == [0, 0] and dc[3][0].get("locked") is True, str(dc[:1])[:300])
+    s, e = post(base, "get_table", handle=h, rows=[3, 9])
+    check("rows out of range -> bad_request", s == 400, str(e))
+    s, e = post(base, "get_table", handle=fx["block_handle"] if "block_handle" in fx else "1")
+    check("not a table -> error", s in (400, 404), str(e))
+    s, e = post(base, "get_table")
+    check("no handle with 2 tables -> bad_request", s == 400 and "2 tables" in e.get("error", ""), str(e))
+
+    _, ex = post(base, "extract_block_attributes")
+    cols = ex.get("columns", [])
+    rows = ex.get("rows", [])
+    check("extract_block_attributes: NAME column, PUMP-1",
+          "NAME" in cols and rows and rows[0][cols.index("NAME")] == "PUMP-1" and rows[0][1] == "MCP_BLK", str(ex)[:300])
+    _, ex = post(base, "extract_block_attributes", blocks="NO_SUCH*")
+    check("extract_block_attributes: no match -> 0", ex.get("total") == 0, str(ex))
+
+
 async def test_mcp(port: int) -> None:
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -259,6 +312,7 @@ def main() -> int:
     if is_fresh(base):
         test_write(base)
         test_read(base)
+        test_tables(base)
     asyncio.run(test_mcp(args.port))
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1

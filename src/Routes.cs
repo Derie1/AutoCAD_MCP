@@ -24,6 +24,10 @@ internal static class Routes
             Route.Main("list_xrefs", CatalogHandlers.ListXrefs),
             Route.Main("list_styles", CatalogHandlers.ListStyles),
 
+            // tables and attributes
+            Route.Main("get_table", TableHandlers.GetTable),
+            Route.Main("extract_block_attributes", TableHandlers.ExtractBlockAttributes),
+
             // draw
             Route.Main("create_line", DrawHandlers.CreateLine),
 
