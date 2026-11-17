@@ -83,7 +83,8 @@ def test_concurrency(base: str, n: int = 100) -> None:
     check("AutoCAD still answers after the burst", status == 200 and h.get("ok") is True)
 
 
-READ_ONLY_TOOLS = {"health_check", "get_document_info", "find_entities"}
+READ_ONLY_TOOLS = {"health_check", "get_document_info", "find_entities", "get_selection", "list_documents",
+                   "list_layers", "list_blocks", "list_layouts", "list_xrefs", "list_styles"}
 
 
 def post(base: str, route: str, **args) -> tuple[int, dict]:
@@ -95,12 +96,17 @@ def count(base: str, **filters) -> int:
     return r.get("total", -1)
 
 
-def test_write(base: str) -> None:
-    print("Write tools (step 1: find_entities, create_line, undo)")
+def is_fresh(base: str) -> bool:
+    """True only for a new, unnamed, empty drawing: the only place the test may change anything."""
     _, d = post(base, "get_document_info")
     if d.get("is_saved_to_file") or d.get("counts", {}).get("model_space_entities") != 0:
         print(f"    SKIPPED: active drawing {d.get('name')} is not a new empty drawing")
-        return
+        return False
+    return True
+
+
+def test_write(base: str) -> None:
+    print("Write tools (step 1: find_entities, create_line, undo)")
 
     check("find_entities on empty drawing -> 0", count(base) == 0)
     s, a = post(base, "create_line", start=[0, 0], end=[100, 0])
@@ -138,6 +144,88 @@ def test_write(base: str) -> None:
     check("undo with nothing recorded -> nothing_to_undo", s == 409 and e.get("code") == "nothing_to_undo", str(e))
 
 
+def by_name(items: list[dict], name: str) -> dict:
+    return next((i for i in items if i.get("name") == name), {})
+
+
+def test_read(base: str) -> None:
+    print("Read tools (step 2) on a COM-built fixture")
+    import fixture
+    doc = fixture.active_document()
+    fx = fixture.build_step2(doc)
+
+    _, r = post(base, "list_documents")
+    check("list_documents: one active", sum(1 for x in r.get("documents", []) if x.get("active")) == 1, str(r))
+
+    _, r = post(base, "list_layers")
+    layers = r.get("layers", [])
+    a = by_name(layers, "MCP_A")
+    check("list_layers: MCP_A red with 2 entities", a.get("color") == 1 and a.get("entities") == 2, str(a))
+    check("list_layers: MCP_FROZEN frozen", by_name(layers, "MCP_FROZEN").get("frozen") is True)
+    lk = by_name(layers, "MCP_LOCKED")
+    check("list_layers: MCP_LOCKED locked, 1 entity", lk.get("locked") is True and lk.get("entities") == 1, str(lk))
+    check("list_layers: layer 0 current", by_name(layers, "0").get("current") is True)
+    _, r = post(base, "list_layers", name="MCP_*", with_counts=False)
+    check("list_layers name filter -> 3", r.get("count") == 3, str(r))
+
+    _, r = post(base, "list_blocks")
+    b = by_name(r.get("blocks", []), "MCP_BLK")
+    attrs = b.get("attributes", [])
+    check("list_blocks: MCP_BLK, 1 reference, attribute NAME",
+          b.get("references") == 1 and attrs and attrs[0].get("tag") == "NAME" and attrs[0].get("default") == "X", str(b))
+
+    _, r = post(base, "list_layouts")
+    lays = r.get("layouts", [])
+    check("list_layouts: Model + 2 layouts, Model current",
+          len(lays) == 3 and lays[0].get("model") and lays[0].get("current"), str(r)[:300])
+    _, r = post(base, "list_xrefs")
+    check("list_xrefs: none", r.get("count") == 0, str(r))
+
+    _, r = post(base, "list_styles")
+    check("list_styles: all five kinds", set(r) >= {"text", "dimension", "table", "multileader", "linetype"}, str(list(r)))
+    check("list_styles: a current text style", any(s.get("current") for s in r.get("text", [])), str(r.get("text")))
+    s, r = post(base, "list_styles", kinds=["text"])
+    check("list_styles kinds=text only", "text" in r and "table" not in r, str(list(r)))
+    s, e = post(base, "list_styles", kinds=["fonts"])
+    check("list_styles bad kind -> bad_request", s == 400, str(e))
+
+    _, r = post(base, "get_system_variable", names=["INSUNITS", "clayer", "LIMMAX", "NO_SUCH_VAR"])
+    v = r.get("values", {})
+    check("get_system_variable values", isinstance(v.get("INSUNITS"), int) and v.get("CLAYER") == "0"
+          and isinstance(v.get("LIMMAX"), list) and "error" in v.get("NO_SUCH_VAR", {}), str(v))
+
+    check("find text=Hello* -> 1", count(base, text="Hello*") == 1)
+    check("find text=*second* (MTEXT) -> 1", count(base, text="*second*") == 1)
+    check("find text=PUMP-1 (attribute) -> 1", count(base, text="PUMP-1") == 1)
+    check("find blocks=MCP_* -> 1", count(base, blocks="MCP_*") == 1)
+    check("find types=TEXT_ANY -> 2", count(base, types="TEXT_ANY") == 2)
+    check("find space=model -> 6", count(base, space="model") == fx["model_entities"])
+    check("find space=paper -> 0", count(base, space="paper") == 0)
+    s, e = post(base, "find_entities", space="NoSuchLayout")
+    check("find unknown layout -> not_found", s == 404, str(e))
+
+    _, r = post(base, "get_entity_properties",
+                handles=[fx["circle_handle"], fx["polyline_handle"], fx["block_ref_handle"], "FFFFFF", "xyz"])
+    items = r.get("items", [])
+    c, pl, br, missing, bad = (items + [{}] * 5)[:5]
+    check("props: circle r=5 at [200,0,0]", c.get("radius") == 5 and c.get("center") == [200, 0, 0], str(c))
+    check("props: polyline closed, 4 vertices, bulge 0.5",
+          pl.get("closed") is True and len(pl.get("vertices", [])) == 4 and pl["vertices"][0].get("bulge") == 0.5, str(pl))
+    battrs = br.get("attributes", [])
+    check("props: block ref MCP_BLK with NAME=PUMP-1",
+          br.get("block") == "MCP_BLK" and battrs and battrs[0].get("value") == "PUMP-1", str(br))
+    check("props: unknown handle -> item error not_found", missing.get("code") == "not_found", str(missing))
+    check("props: bad handle -> item error bad_request", bad.get("code") == "bad_request", str(bad))
+
+    fixture.clear_selection(doc)
+    _, r = post(base, "get_selection")
+    check("get_selection: nothing selected -> 0", r.get("total") == 0, str(r))
+    fixture.select_all(doc)
+    _, r = post(base, "get_selection")
+    check("get_selection after select all -> >= 5", r.get("total", 0) >= 5, str(r)[:300])
+    fixture.clear_selection(doc)
+
+
 async def test_mcp(port: int) -> None:
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -168,7 +256,9 @@ def main() -> int:
         print(f"Bridge not reachable at {base}: {e}. Type MCPSTART in AutoCAD.")
         return 2
     test_concurrency(base)
-    test_write(base)
+    if is_fresh(base):
+        test_write(base)
+        test_read(base)
     asyncio.run(test_mcp(args.port))
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1

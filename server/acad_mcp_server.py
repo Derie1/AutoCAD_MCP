@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.1.2"
+SERVER_VERSION = "0.1.3"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))
@@ -158,10 +158,13 @@ async def find_entities(
         'Area in XY: {"min": [x, y], "max": [x, y], "mode": "inside" | "crossing"}. '
         '"inside" (default) = entirely inside, "crossing" = touches the area.'))] = None,
     space: Annotated[str, Field(description='"all" (default), "model", "paper" (all layouts) or a layout name.')] = "all",
+    text: Annotated[NameList, Field(description=(
+        "Text pattern, * and ? wildcards, case-insensitive; use *word* to search for a substring. Matches TEXT/MTEXT "
+        "content, block attribute values, dimension text overrides and AutoCAD table cells; other types never match."))] = None,
     offset: Annotated[int, Field(ge=0, description="Skip this many results (paging).")] = 0,
     limit: Annotated[int, Field(ge=1, le=2000, description="Maximum results to return (default 200).")] = 200,
 ) -> dict[str, Any]:
-    """Find entities in the active drawing by type, layer, block name, area and space.
+    """Find entities in the active drawing by type, layer, block name, area, space and text.
 
     All filters combine with AND. Returns {total, offset, count, has_more, items}; each item has
     handle, type, layer, color, linetype, lineweight, space (Model / layout name), block (for
@@ -169,7 +172,97 @@ async def find_entities(
     Read-only.
     """
     return await call("find_entities", types=types, layers=layers, blocks=blocks, window=window,
-                      space=space, offset=offset, limit=limit)
+                      space=space, text=text, offset=offset, limit=limit)
+
+
+@mcp.tool()
+async def get_entity_properties(
+    handles: Annotated[list[str], Field(min_length=1, max_length=100, description="Entity handles from find_entities or get_selection.")],
+    include_xdata: Annotated[bool, Field(description="Also return extended data (XData).")] = False,
+) -> dict[str, Any]:
+    """Full properties of entities by handle.
+
+    Common: handle, type, layer, color, linetype, lineweight, space, bounds, visible, transparency.
+    Plus per type: LINE start/end/length/angle; CIRCLE center/radius/area; ARC angles/length;
+    LWPOLYLINE vertices (with bulges, widths), closed, length, area; TEXT/MTEXT text, position,
+    height, rotation, style (MTEXT also raw "contents" with formatting codes); INSERT block,
+    position, rotation, scale, attributes [{tag, value}], dynamic block properties; DIMENSION
+    measurement and text override; HATCH pattern/area; ACAD_TABLE size and style (cell contents:
+    get_table). An unknown handle gives an item with "error" instead of failing the whole call.
+    """
+    return await call("get_entity_properties", handles=handles, include_xdata=include_xdata)
+
+
+@mcp.tool()
+async def get_selection(limit: Annotated[int, Field(ge=1, le=2000)] = 200) -> dict[str, Any]:
+    """Objects the user has selected in AutoCAD right now (selected before calling, with grips shown).
+
+    Returns {total, count, has_more, items} with the same entity summary as find_entities.
+    Use it when the user says "this", "these objects", "the selected table".
+    """
+    return await call("get_selection", limit=limit)
+
+
+@mcp.tool()
+async def get_system_variable(
+    names: Annotated[list[str], Field(min_length=1, description='System variable names, e.g. ["INSUNITS", "LTSCALE", "CLAYER"].')],
+) -> dict[str, Any]:
+    """Read AutoCAD system variables. Returns {values: {NAME: value}}; unknown names get {"error": ...}."""
+    return await call("get_system_variable", names=names)
+
+
+# ---------------------------------------------------------------- catalog (read-only)
+
+@mcp.tool()
+async def list_documents() -> dict[str, Any]:
+    """Drawings open in AutoCAD: name, path (null if never saved), active, read_only,
+    has_unsaved_changes (known only for the active drawing). All other tools work on the active drawing."""
+    return await call("list_documents")
+
+
+@mcp.tool()
+async def list_layers(
+    name: Annotated[str | None, Field(description="Layer name filter with * and ? wildcards.")] = None,
+    with_counts: Annotated[bool, Field(description="Count entities per layer (model space and layouts).")] = True,
+) -> dict[str, Any]:
+    """Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,
+    plottable, current, from_xref, description and the number of entities on each."""
+    return await call("list_layers", name=name, with_counts=with_counts)
+
+
+@mcp.tool()
+async def list_blocks(
+    name: Annotated[str | None, Field(description="Block name filter with * and ? wildcards.")] = None,
+    include_anonymous: bool = False,
+    include_xrefs: bool = False,
+) -> dict[str, Any]:
+    """Block definitions: name, dynamic, references (number of insertions, dynamic blocks included),
+    entities, attribute definitions [{tag, prompt, default, constant, invisible}], origin, units."""
+    return await call("list_blocks", name=name, include_anonymous=include_anonymous, include_xrefs=include_xrefs)
+
+
+@mcp.tool()
+async def list_layouts() -> dict[str, Any]:
+    """Model and paper layouts in tab order: name, current, entities, viewports, plot device,
+    paper size, plot style table and rotation."""
+    return await call("list_layouts")
+
+
+@mcp.tool()
+async def list_xrefs() -> dict[str, Any]:
+    """External references: name, saved path, status (Resolved, Unloaded, FileNotFound, ...),
+    overlay or attachment, nested, number of references."""
+    return await call("list_xrefs")
+
+
+@mcp.tool()
+async def list_styles(
+    kinds: Annotated[list[str] | None, Field(description=(
+        'Which styles: any of "text", "dimension", "table", "multileader", "linetype". Default: all.'))] = None,
+) -> dict[str, Any]:
+    """Named styles of the drawing with the current one marked. Text styles include font,
+    height, width factor and oblique angle; dimension styles text height, arrow size, scale."""
+    return await call("list_styles", kinds=kinds)
 
 
 # ---------------------------------------------------------------- draw

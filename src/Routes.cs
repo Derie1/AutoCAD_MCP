@@ -14,6 +14,15 @@ internal static class Routes
 
             // query
             Route.Main("find_entities", QueryHandlers.FindEntities),
+            Route.Main("get_entity_properties", QueryHandlers.GetEntityProperties),
+            Route.Main("get_selection", QueryHandlers.GetSelection),
+            Route.Main("get_system_variable", QueryHandlers.GetSystemVariable),
+            Route.Main("list_documents", CatalogHandlers.ListDocuments),
+            Route.Main("list_layers", CatalogHandlers.ListLayers),
+            Route.Main("list_blocks", CatalogHandlers.ListBlocks),
+            Route.Main("list_layouts", CatalogHandlers.ListLayouts),
+            Route.Main("list_xrefs", CatalogHandlers.ListXrefs),
+            Route.Main("list_styles", CatalogHandlers.ListStyles),
 
             // draw
             Route.Main("create_line", DrawHandlers.CreateLine),

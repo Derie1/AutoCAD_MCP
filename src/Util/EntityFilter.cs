@@ -12,6 +12,8 @@ namespace AcadMcpBridge;
 ///   blocks  block names (INSERT only, dynamic blocks by their definition name), wildcards allowed
 ///   window  {"min": [x, y], "max": [x, y], "mode": "inside" | "crossing"}  (XY only)
 ///   space   "all" (default), "model", "paper" (all layouts) or a layout name
+///   text    text pattern with * and ?, case-insensitive, matched against TEXT / MTEXT (plain text),
+///           block attribute values, dimension text overrides and table cells; other types never match
 /// </summary>
 internal sealed class EntityFilter
 {
@@ -26,6 +28,7 @@ internal sealed class EntityFilter
     private readonly HashSet<string>? _types;
     private readonly Regex? _layers;
     private readonly Regex? _blocks;
+    private readonly Regex? _text;
     private readonly Point2d _wMin, _wMax;
     private readonly bool _hasWindow, _crossing;
     private readonly string _space;
@@ -57,6 +60,7 @@ internal sealed class EntityFilter
             };
         }
         _space = Args.Str(a, "space") ?? "all";
+        _text = Wildcards(Args.StrList(a, "text"), multiline: true);
     }
 
     /// <summary>Block table records (model space / layouts) to scan, in layout tab order.</summary>
@@ -94,6 +98,7 @@ internal sealed class EntityFilter
     {
         if (_layers != null && !_layers.IsMatch(e.Layer)) return false;
         if (_blocks != null && (e is not BlockReference br || !_blocks.IsMatch(Entities.EffectiveBlockName(br, tr)))) return false;
+        if (_text != null && !TextMatches(e, tr)) return false;
         if (_hasWindow)
         {
             Extents3d ext;
@@ -118,10 +123,39 @@ internal sealed class EntityFilter
         return result;
     }
 
-    private static Regex? Wildcards(List<string>? patterns)
+    private bool TextMatches(Entity e, Transaction tr)
+    {
+        switch (e)
+        {
+            case DBText t: return _text!.IsMatch(t.TextString);
+            case MText m: return _text!.IsMatch(m.Text);
+            case Dimension d: return !string.IsNullOrEmpty(d.DimensionText) && _text!.IsMatch(d.DimensionText);
+            case Table tb:
+                for (int r = 0; r < tb.Rows.Count; r++)
+                    for (int c = 0; c < tb.Columns.Count; c++)
+                    {
+                        string s;
+                        try { s = tb.Cells[r, c].GetTextString(FormatOption.IgnoreMtextFormat); } catch { continue; }
+                        if (!string.IsNullOrEmpty(s) && _text!.IsMatch(s)) return true;
+                    }
+                return false;
+            case BlockReference br:
+                foreach (ObjectId id in br.AttributeCollection)
+                    if (tr.GetObject(id, OpenMode.ForRead) is AttributeReference ar &&
+                        _text!.IsMatch(ar.IsMTextAttribute ? ar.MTextAttribute.Text : ar.TextString))
+                        return true;
+                return false;
+            default: return false;
+        }
+    }
+
+    /// <param name="multiline">text values: * also spans line breaks (MTEXT paragraphs)</param>
+    private static Regex? Wildcards(List<string>? patterns, bool multiline = false)
     {
         if (patterns == null || patterns.Count == 0) return null;
         var parts = patterns.Select(p => "^" + Regex.Escape(p).Replace(@"\*", ".*").Replace(@"\?", ".") + "$");
-        return new Regex(string.Join("|", parts), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        if (multiline) options |= RegexOptions.Singleline;
+        return new Regex(string.Join("|", parts), options);
     }
 }
