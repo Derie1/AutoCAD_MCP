@@ -33,6 +33,15 @@ internal static class Routes
 
             // edit
             Route.Async("undo", EditHandlers.Undo),
+            Route.Main("set_entity_properties", EditHandlers.SetEntityProperties),
+            Route.Main("transform_entities", EditHandlers.TransformEntities),
+            Route.Main("delete_entities", EditHandlers.DeleteEntities),
+            Route.Main("set_selection", EditHandlers.SetSelection),
+            Route.Main("set_system_variable", EditHandlers.SetSystemVariable),
+
+            // layers
+            Route.Main("create_layer", LayerHandlers.CreateLayer),
+            Route.Main("set_layer_state", LayerHandlers.SetLayerState),
         };
         return list.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
     }

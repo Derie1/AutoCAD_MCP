@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.1.4"
+SERVER_VERSION = "0.1.5"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))
@@ -339,6 +339,142 @@ async def undo(steps: Annotated[int, Field(ge=1, le=100, description="How many M
     the user to use UNDO in AutoCAD. Returns {undone, remaining_mcp_changes}.
     """
     return await call("undo", steps=steps)
+
+
+Handles = Annotated[list[str] | None, Field(description="Entity handles to act on (from find_entities / get_selection). Use this OR filter.")]
+Filter = Annotated[dict[str, Any] | None, Field(description=(
+    "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, "
+    "space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."))]
+DryRun = Annotated[bool, Field(description="Change nothing; report how many and which objects would be affected.")]
+Confirm = Annotated[bool, Field(description="Required when objects are chosen by filter. Ask the user before bulk changes.")]
+
+@mcp.tool()
+async def set_entity_properties(
+    handles: Handles = None,
+    filter: Filter = None,
+    layer: Annotated[str | None, Field(description="Move to this existing layer.")] = None,
+    color: Color = None,
+    linetype: Annotated[str | None, Field(description='Linetype name, "ByLayer" or "ByBlock"; loaded from acadiso.lin/acad.lin if missing.')] = None,
+    lineweight: Annotated[str | float | None, Field(description='"ByLayer", "ByBlock", "Default" or millimetres, e.g. 0.25.')] = None,
+    linetype_scale: Annotated[float | None, Field(gt=0)] = None,
+    transparency: Annotated[str | float | None, Field(description='"ByLayer", "ByBlock" or percent 0-90.')] = None,
+    visible: bool | None = None,
+    dry_run: DryRun = False,
+    confirm: Confirm = False,
+) -> dict[str, Any]:
+    """Change layer, color, linetype, lineweight, linetype scale, transparency or visibility of objects.
+
+    Objects are chosen by handles or by filter. Objects on locked layers make the whole call fail
+    (nothing changes); unlock the layer first. One call = one step for the undo tool.
+    """
+    return await call("set_entity_properties", handles=handles, filter=filter, layer=layer, color=color,
+                      linetype=linetype, lineweight=lineweight, linetype_scale=linetype_scale,
+                      transparency=transparency, visible=visible, dry_run=dry_run, confirm=confirm)
+
+
+
+@mcp.tool()
+async def transform_entities(
+    operation: Annotated[str, Field(description='"move", "copy", "rotate", "scale" or "mirror".')],
+    handles: Handles = None,
+    filter: Filter = None,
+    vector: Annotated[list[float] | None, Field(description="move/copy: displacement [dx, dy] or [dx, dy, dz] (or give from + to).")] = None,
+    from_point: Annotated[list[float] | None, Field(description="move/copy: base point (with to).")] = None,
+    to: Annotated[list[float] | None, Field(description="move/copy: target point.")] = None,
+    count: Annotated[int, Field(ge=1, le=1000, description="copy: number of copies, each one more displacement further (an array).")] = 1,
+    base: Annotated[list[float] | None, Field(description="rotate/scale: base point.")] = None,
+    angle_deg: Annotated[float | None, Field(description="rotate: angle in degrees, counter-clockwise.")] = None,
+    factor: Annotated[float | None, Field(gt=0, description="scale: factor.")] = None,
+    p1: Annotated[list[float] | None, Field(description="mirror: first point of the mirror line.")] = None,
+    p2: Annotated[list[float] | None, Field(description="mirror: second point of the mirror line.")] = None,
+    keep_original: Annotated[bool, Field(description="mirror: keep the originals (default true).")] = True,
+    dry_run: DryRun = False,
+    confirm: Confirm = False,
+) -> dict[str, Any]:
+    """Move, copy (also as a linear array), rotate, scale or mirror objects.
+
+    Returns {operation, affected} and, for copy and mirror with keep_original, created_handles.
+
+    Objects are chosen by handles or by filter. Objects on locked layers make the whole call fail
+    (nothing changes); unlock the layer first. One call = one step for the undo tool.
+    """
+    return await call("transform_entities", operation=operation, handles=handles, filter=filter, vector=vector,
+                      **{"from": from_point}, to=to, count=count, base=base, angle_deg=angle_deg, factor=factor,
+                      p1=p1, p2=p2, keep_original=keep_original, dry_run=dry_run, confirm=confirm)
+
+
+
+@mcp.tool()
+async def delete_entities(handles: Handles = None, filter: Filter = None,
+                          dry_run: DryRun = False, confirm: Confirm = False) -> dict[str, Any]:
+    """Delete objects. Returns {deleted}. Ask the user before deleting objects they did not ask about.
+
+    Objects are chosen by handles or by filter. Objects on locked layers make the whole call fail
+    (nothing changes); unlock the layer first. One call = one step for the undo tool.
+    """
+    return await call("delete_entities", handles=handles, filter=filter, dry_run=dry_run, confirm=confirm)
+
+
+
+@mcp.tool()
+async def set_selection(
+    handles: Annotated[list[str], Field(description="Objects to select with grips in AutoCAD; [] clears the selection.")],
+) -> dict[str, Any]:
+    """Select objects in AutoCAD for the user (shows grips), e.g. to point at what was found.
+    Does not change the drawing."""
+    return await call("set_selection", handles=handles)
+
+
+@mcp.tool()
+async def set_system_variable(
+    name: str,
+    value: Annotated[str | float | int | list[float], Field(description="New value; type must fit the variable.")],
+) -> dict[str, Any]:
+    """Set an AutoCAD system variable. Returns {name, old, new}. Read-only variables are refused.
+    Counts as one undo step."""
+    return await call("set_system_variable", name=name, value=value)
+
+
+# ---------------------------------------------------------------- layers
+
+LayerColor = Annotated[str | int | None, Field(description='ACI index 1-255 or "#RRGGBB".')]
+
+
+@mcp.tool()
+async def create_layer(
+    name: str,
+    color: LayerColor = None,
+    linetype: Annotated[str | None, Field(description="Linetype name; loaded from acadiso.lin/acad.lin if missing.")] = None,
+    lineweight: Annotated[str | float | None, Field(description='"Default" or millimetres, e.g. 0.35.')] = None,
+    plottable: bool | None = None,
+    description: str | None = None,
+    current: Annotated[bool, Field(description="Make it the current layer.")] = False,
+) -> dict[str, Any]:
+    """Create a new layer. Fails with already_exists if the name is taken (then use set_layer_state)."""
+    return await call("create_layer", name=name, color=color, linetype=linetype, lineweight=lineweight,
+                      plottable=plottable, description=description, current=current)
+
+
+@mcp.tool()
+async def set_layer_state(
+    names: Annotated[list[str], Field(description="Layer names, * and ? wildcards allowed.")],
+    on: bool | None = None,
+    frozen: bool | None = None,
+    locked: bool | None = None,
+    plottable: bool | None = None,
+    current: Annotated[bool, Field(description="Make the (single) layer current.")] = False,
+    color: LayerColor = None,
+    linetype: str | None = None,
+    lineweight: Annotated[str | float | None, Field(description='"Default" or millimetres.')] = None,
+    description: str | None = None,
+    new_name: Annotated[str | None, Field(description="Rename (exactly one layer, no wildcards).")] = None,
+) -> dict[str, Any]:
+    """Turn layers on/off, freeze/thaw, lock/unlock, set plottable, color, linetype, lineweight,
+    description, make current or rename. Only the given settings change. The current layer
+    cannot be frozen. Returns the changed layers."""
+    return await call("set_layer_state", names=names, on=on, frozen=frozen, locked=locked, plottable=plottable,
+                      current=current or None, color=color, linetype=linetype, lineweight=lineweight,
+                      description=description, new_name=new_name)
 
 
 def main() -> None:

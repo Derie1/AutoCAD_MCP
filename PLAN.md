@@ -241,12 +241,12 @@ AutoCAD_MCP\
 - [ ] `create_text`, `create_mtext`, `create_table` (из массива строк)
 - [ ] `insert_block` — с атрибутами и свойствами динблока, масштаб/поворот
 - [ ] `create_dimension` — линейный / выровненный (позже остальные)
-- [ ] `set_entity_properties` — слой, цвет, тип линий, вес, видимость
+- [x] `set_entity_properties` — слой, цвет, тип линий, вес, видимость
 - [ ] `update_block_attributes` — массово по фильтру (handle или «блок + атрибут = значение»)
-- [ ] `transform_entities` — move / copy / rotate / scale / mirror
-- [ ] `delete_entities` — с подтверждением числа объектов
-- [ ] `create_layer`, `set_layer_state` (вкл/выкл/заморозить/блокировать/цвет/текущий)
-- [ ] `set_system_variable`
+- [x] `transform_entities` — move / copy / rotate / scale / mirror
+- [x] `delete_entities` — с подтверждением числа объектов
+- [x] `create_layer`, `set_layer_state` (вкл/выкл/заморозить/блокировать/цвет/текущий)
+- [x] `set_system_variable`
 - [x] `undo` — откатить последние вызовы MCP — 0.1.2
 
 ### Этап 4 — файлы, листы, печать
@@ -458,6 +458,14 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
     собираются один раз по всей таблице.
   - Сразу после запуска AutoCAD COM-объект ещё не отдаёт `ActiveDocument` — фикстура ждёт.
   - smoke-тест: 91/91 в 2026 и 2027.
+
+- 2026-11-17 — **шаг 4 сделан (0.1.5).** `create_layer`, `set_layer_state` (вкл/выкл, заморозка,
+  блокировка, печать, цвет, тип и вес линий, текущий, переименование; маски имён), `set_entity_properties`,
+  `transform_entities` (move / copy с массивом / rotate / scale / mirror), `delete_entities`, `set_selection`,
+  `set_system_variable`. Общий выбор объектов `Targets`: `handles` или `filter` (ключи `find_entities`);
+  фильтр требует `confirm: true`, `dry_run` показывает, что будет затронуто; объекты на заблокированных
+  слоях — отказ всего вызова. Выбор делается до блокировки документа, поэтому отказ и dry_run не оставляют
+  пустых групп UNDO. Типы линий подгружаются из acadiso.lin / acad.lin. smoke-тест: 120/120 в 2026 и 2027.
 
 ## 9. Возможные усовершенствования
 - **Псевдотаблицы из линий и текстов** — распознавать сетку из отрезков/полилиний и тексты в ячейках,

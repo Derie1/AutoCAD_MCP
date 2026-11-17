@@ -88,11 +88,11 @@ READ_ONLY_TOOLS = {"health_check", "get_document_info", "find_entities", "get_se
                    "extract_block_attributes"}
 
 
-def post(base: str, route: str, **args) -> tuple[int, dict]:
+def post(base: str, route: str, /, **args) -> tuple[int, dict]:
     return http(base, "POST", route, json.dumps(args).encode("utf-8"))
 
 
-def count(base: str, **filters) -> int:
+def count(base: str, /, **filters) -> int:
     _, r = post(base, "find_entities", **filters)
     return r.get("total", -1)
 
@@ -313,6 +313,8 @@ def main() -> int:
         test_write(base)
         test_read(base)
         test_tables(base)
+        import test_edit
+        test_edit.run(base, post, count, check)
     asyncio.run(test_mcp(args.port))
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1

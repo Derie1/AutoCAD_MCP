@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.Geometry;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 
 namespace AcadMcpBridge.Handlers;
@@ -44,5 +46,187 @@ internal static class EditHandlers
         }
         try { doc.Editor.UpdateScreen(); } catch { }
         return new JsonObject { ["undone"] = changes, ["remaining_mcp_changes"] = UndoTracker.Available(doc) };
+    }
+
+    // ---------------------------------------------------------------- properties
+
+    public static JsonObject SetEntityProperties(JsonObject a)
+    {
+        bool any = a["layer"] != null || a["color"] != null || a["linetype"] != null || a["lineweight"] != null
+                   || a["linetype_scale"] != null || a["transparency"] != null || a["visible"] != null;
+        if (!any) throw new BridgeException("bad_request",
+            "nothing to change: pass layer, color, linetype, lineweight, linetype_scale, transparency or visible");
+        var targets = Targets.Prepare(a, "set_entity_properties");
+        if (targets.Preview != null) return targets.Preview;
+
+        return Write.Run("set_entity_properties", ctx =>
+        {
+            string? layer = Args.Str(a, "layer") is string l ? ctx.Layer(l) : null;
+            var color = a["color"] is JsonNode c ? Entities.ColorFromJson(c, "color") : null;
+            ObjectId? linetype = Args.Str(a, "linetype") is string lt ? Props.Linetype(ctx.Db, ctx.Tr, lt) : null;
+            LineWeight? lineweight = a["lineweight"] is JsonNode lw ? Props.LineWeight(lw, "lineweight") : null;
+            double? ltScale = Args.Num(a, "linetype_scale");
+            if (ltScale is <= 0) throw new BridgeException("bad_request", "'linetype_scale' must be > 0");
+            Autodesk.AutoCAD.Colors.Transparency? transparency =
+                a["transparency"] is JsonNode tp ? Props.Transparency(tp, "transparency") : null;
+            bool? visible = a["visible"] != null ? Args.Bool(a, "visible") : null;
+
+            foreach (var id in targets.Ids)
+            {
+                var e = (Entity)ctx.Tr.GetObject(id, OpenMode.ForWrite);
+                if (layer != null) e.Layer = layer;
+                if (color != null) e.Color = color;
+                if (linetype is ObjectId ltId) e.LinetypeId = ltId;
+                if (lineweight is LineWeight w) e.LineWeight = w;
+                if (ltScale is double s) e.LinetypeScale = s;
+                if (transparency is { } t) e.Transparency = t;
+                if (visible is bool v) e.Visible = v;
+            }
+            return new JsonObject { ["changed"] = targets.Ids.Count };
+        });
+    }
+
+    // ---------------------------------------------------------------- transform
+
+    /// <summary>move / copy / rotate / scale / mirror, each as one matrix applied to all targets.</summary>
+    public static JsonObject TransformEntities(JsonObject a)
+    {
+        string op = Args.Str(a, "operation", required: true)!.ToLowerInvariant();
+        Matrix3d m;
+        bool keepOriginal = false;
+        int copies = 1;
+        switch (op)
+        {
+            case "move":
+            case "copy":
+                Vector3d v;
+                if (Args.Point(a, "vector") is Point3d vec) v = vec - Point3d.Origin;
+                else v = Args.Point(a, "to", required: true)!.Value - Args.Point(a, "from", required: true)!.Value;
+                if (v.IsZeroLength()) throw new BridgeException("bad_request", "the displacement is zero");
+                m = Matrix3d.Displacement(v);
+                if (op == "copy") { keepOriginal = true; copies = Args.Int(a, "count", 1, 1, 1000); }
+                break;
+            case "rotate":
+                double angle = Args.Num(a, "angle_deg", required: true)!.Value * Math.PI / 180;
+                m = Matrix3d.Rotation(angle, Vector3d.ZAxis, Args.Point(a, "base", required: true)!.Value);
+                break;
+            case "scale":
+                double f = Args.Num(a, "factor", required: true)!.Value;
+                if (f <= 0) throw new BridgeException("bad_request", "'factor' must be > 0");
+                m = Matrix3d.Scaling(f, Args.Point(a, "base", required: true)!.Value);
+                break;
+            case "mirror":
+                var p1 = Args.Point(a, "p1", required: true)!.Value;
+                var p2 = Args.Point(a, "p2", required: true)!.Value;
+                if (p1.IsEqualTo(p2)) throw new BridgeException("bad_request", "'p1' and 'p2' must differ");
+                m = Matrix3d.Mirroring(new Line3d(p1, p2));
+                keepOriginal = Args.Bool(a, "keep_original", true);
+                break;
+            default:
+                throw new BridgeException("bad_request", "'operation' must be move, copy, rotate, scale or mirror");
+        }
+
+        var targets = Targets.Prepare(a, op);
+        if (targets.Preview != null) return targets.Preview;
+
+        return Write.Run("transform_entities", ctx =>
+        {
+            var created = new JsonArray();
+            foreach (var id in targets.Ids)
+            {
+                var e = (Entity)ctx.Tr.GetObject(id, OpenMode.ForRead);
+                if (!keepOriginal)
+                {
+                    e.UpgradeOpen();
+                    e.TransformBy(m);
+                    continue;
+                }
+                var owner = (BlockTableRecord)ctx.Tr.GetObject(e.OwnerId, OpenMode.ForWrite);
+                var step = m;
+                for (int i = 0; i < copies; i++)
+                {
+                    var copy = e.GetTransformedCopy(step);
+                    ctx.Add(owner, copy);
+                    created.Add(copy.Handle.ToString());
+                    step = step.PreMultiplyBy(m); // the next copy one step further
+                }
+            }
+            var r = new JsonObject { ["operation"] = op, ["affected"] = targets.Ids.Count };
+            if (keepOriginal) r["created_handles"] = created;
+            return r;
+        });
+    }
+
+    // ---------------------------------------------------------------- delete
+
+    public static JsonObject DeleteEntities(JsonObject a)
+    {
+        var targets = Targets.Prepare(a, "delete");
+        if (targets.Preview != null) return targets.Preview;
+        return Write.Run("delete_entities", ctx =>
+        {
+            foreach (var id in targets.Ids)
+                ((Entity)ctx.Tr.GetObject(id, OpenMode.ForWrite)).Erase();
+            return new JsonObject { ["deleted"] = targets.Ids.Count };
+        });
+    }
+
+    // ---------------------------------------------------------------- selection and system variables
+
+    /// <summary>Selects objects with grips for the user (PickFirst); an empty list clears the selection.</summary>
+    public static JsonObject SetSelection(JsonObject a)
+    {
+        var handles = Args.StrList(a, "handles") ?? throw new BridgeException("bad_request", "'handles' is required (an empty list clears)");
+        var doc = JsonUtil.ActiveDocument();
+        var ids = new List<ObjectId>();
+        using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+        {
+            foreach (var h in handles) ids.Add(Entities.OpenEntity(tr, doc.Database, h, OpenMode.ForRead).ObjectId);
+            tr.Commit();
+        }
+        doc.Editor.SetImpliedSelection(ids.ToArray());
+        try { doc.Editor.UpdateScreen(); } catch { }
+        return new JsonObject { ["selected"] = ids.Count };
+    }
+
+    public static JsonObject SetSystemVariable(JsonObject a)
+    {
+        string name = Args.Str(a, "name", required: true)!.ToUpperInvariant();
+        var node = a["value"] ?? throw new BridgeException("bad_request", "'value' is required");
+        object current;
+        try { current = AcApp.GetSystemVariable(name); }
+        catch { throw new BridgeException("not_found", $"unknown system variable {name}", 404); }
+
+        object value;
+        switch (current)
+        {
+            case short: value = (short)Args.Int(a, "value", 0, short.MinValue, short.MaxValue); break;
+            case int: value = Args.Int(a, "value", 0); break;
+            case double: value = Args.Num(a, "value", required: true)!.Value; break;
+            case string: value = Args.Str(a, "value", required: true)!; break;
+            case Point3d: value = Args.Point(a, "value", required: true)!.Value; break;
+            case Point2d:
+                var p = Args.Point(a, "value", required: true)!.Value;
+                value = new Point2d(p.X, p.Y);
+                break;
+            default:
+                throw new BridgeException("bad_request", $"{name} has a value type that cannot be set here ({current.GetType().Name})");
+        }
+
+        return Write.Run("set_system_variable", ctx =>
+        {
+            try { AcApp.SetSystemVariable(name, value); }
+            catch (Exception ex)
+            {
+                throw new BridgeException("bad_request",
+                    $"AutoCAD refused {name} = {node.ToJsonString()}: {ex.Message} (read-only variable or value out of range)");
+            }
+            return new JsonObject
+            {
+                ["name"] = name,
+                ["old"] = JsonUtil.FromObject(current),
+                ["new"] = JsonUtil.FromObject(AcApp.GetSystemVariable(name)),
+            };
+        });
     }
 }
