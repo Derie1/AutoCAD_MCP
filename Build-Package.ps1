@@ -3,8 +3,13 @@
 
     release\AutoCAD_MCP_<ver>\INSTALL.BAT               installer (EN/RU), run by the user
     release\AutoCAD_MCP_<ver>\AcadMcpBridge.bundle.zip  the bundle INSTALL.BAT unpacks
+    release\AutoCAD_MCP_<ver>\RELEASE.md                what the release is, requirements, installation (RU + EN)
     release\AutoCAD_MCP_<ver>\README.md
     release\AutoCAD_MCP_<ver>.zip                       the same folder as one archive, for users
+    release\RELEASE.md                                  the description of the current release
+
+  Archives of earlier versions stay in release\; only the unpacked folder of an earlier
+  version is replaced by the current one.
 
     .\Build-Package.ps1           # build R25 + R26 and make the release
     .\Build-Package.ps1 -Deploy   # also install it here: INSTALL.BAT A, without the Python and
@@ -58,9 +63,9 @@ Copy-Item "$root\server\acad_mcp_server.py", "$root\server\requirements.txt" "$b
 $name = "AutoCAD_MCP_$version"
 $releaseRoot = Join-Path $root 'release'
 $releaseDir = Join-Path $releaseRoot $name
-# release\ holds only the current version.
-Get-ChildItem $releaseRoot -Filter 'AutoCAD_MCP_*' -ErrorAction SilentlyContinue |
-    Where-Object { $_.BaseName -ne $name } | Remove-Item -Recurse -Force
+# Keep the archives of all versions; only the unpacked folder is replaced by the current version.
+Get-ChildItem $releaseRoot -Filter 'AutoCAD_MCP_*' -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne $name } | Remove-Item -Recurse -Force
 New-Item -ItemType Directory -Force $releaseDir | Out-Null
 $zip = Join-Path $releaseDir 'AcadMcpBridge.bundle.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }
@@ -70,6 +75,9 @@ Compress-Archive -Path "$bundle\*" -DestinationPath $zip
 $bat = [IO.File]::ReadAllText("$root\installer\INSTALL.BAT") -replace "`r?`n", "`r`n"
 [IO.File]::WriteAllText((Join-Path $releaseDir 'INSTALL.BAT'), $bat, $utf8)
 Copy-Item "$root\README.md" $releaseDir -Force
+$notes = [IO.File]::ReadAllText("$root\installer\RELEASE.md").Replace('@VERSION@', $version)
+[IO.File]::WriteAllText((Join-Path $releaseDir 'RELEASE.md'), $notes, $utf8)
+[IO.File]::WriteAllText((Join-Path $releaseRoot 'RELEASE.md'), $notes, $utf8)
 
 $releaseZip = Join-Path $releaseRoot "$name.zip"
 if (Test-Path $releaseZip) { Remove-Item $releaseZip -Force }

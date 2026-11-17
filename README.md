@@ -154,6 +154,10 @@ Unattended: `INSTALL.BAT 2026 EN`, `INSTALL.BAT A`, `INSTALL.BAT U`.
 .\Build-Package.ps1 -Deploy   # то же + установить здесь: INSTALL.BAT A без шагов Python и Claude
 ```
 
+В `release\` копятся архивы всех версий (`AutoCAD_MCP_<версия>.zip`); распакованная папка — только текущей.
+Описание релиза для пользователей (RU + EN): исходник `installer\RELEASE.md`, при сборке кладётся в `release\RELEASE.md`
+и в архив.
+
 Версия — одна, `<Version>` в `src\AcadMcpBridge.csproj`; `PluginVersion` (C#) и `SERVER_VERSION`
 (Python) должны совпадать, иначе сборка остановится. Исходники установщика — папка `installer\`
 (`INSTALL.BAT`, части манифеста `PackageContents\`, `register_claude.py`).
