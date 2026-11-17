@@ -58,6 +58,9 @@ Copy-Item "$root\server\acad_mcp_server.py", "$root\server\requirements.txt" "$b
 $name = "AutoCAD_MCP_$version"
 $releaseRoot = Join-Path $root 'release'
 $releaseDir = Join-Path $releaseRoot $name
+# release\ holds only the current version.
+Get-ChildItem $releaseRoot -Filter 'AutoCAD_MCP_*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.BaseName -ne $name } | Remove-Item -Recurse -Force
 New-Item -ItemType Directory -Force $releaseDir | Out-Null
 $zip = Join-Path $releaseDir 'AcadMcpBridge.bundle.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }

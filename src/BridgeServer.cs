@@ -85,9 +85,7 @@ internal sealed class BridgeServer
 
             JsonObject args = await ReadArgs(req).ConfigureAwait(false);
             var timeout = TimeSpan.FromSeconds(_config.RequestTimeoutSeconds);
-            result = route.OnMainThread
-                ? await MainThread.InvokeAsync(() => route.Run(args), timeout).ConfigureAwait(false)
-                : route.Run(args);
+            result = await route.Invoke(args, timeout).ConfigureAwait(false);
             result["ok"] = true;
         }
         catch (Exception ex)
@@ -127,8 +125,43 @@ internal sealed class BridgeServer
     }
 }
 
-/// <summary>A tool handler. OnMainThread = it calls the AutoCAD API.</summary>
-internal sealed record Route(string Name, bool OnMainThread, Func<JsonObject, JsonObject> Run);
+/// <summary>
+/// A tool handler, in one of three forms:
+///   Http(...)  runs on the HTTP thread, must not touch the AutoCAD API;
+///   Main(...)  runs on AutoCAD's main thread (all reads and writes);
+///   Async(...) starts on the main thread and returns a task that AutoCAD completes later
+///              (commands run through ExecuteInCommandContextAsync, e.g. UNDO).
+///              The task is awaited off the main thread, so AutoCAD is never blocked.
+/// </summary>
+internal sealed class Route
+{
+    private readonly Func<JsonObject, JsonObject>? _sync;
+    private readonly Func<JsonObject, Task<JsonObject>>? _async;
+    private readonly bool _onMainThread;
+
+    private Route(string name, bool onMainThread, Func<JsonObject, JsonObject>? sync, Func<JsonObject, Task<JsonObject>>? async)
+    {
+        Name = name; _onMainThread = onMainThread; _sync = sync; _async = async;
+    }
+
+    public string Name { get; }
+
+    public static Route Http(string name, Func<JsonObject, JsonObject> run) => new(name, false, run, null);
+    public static Route Main(string name, Func<JsonObject, JsonObject> run) => new(name, true, run, null);
+    public static Route Async(string name, Func<JsonObject, Task<JsonObject>> run) => new(name, true, null, run);
+
+    public async Task<JsonObject> Invoke(JsonObject args, TimeSpan timeout)
+    {
+        if (!_onMainThread) return _sync!(args);
+        if (_sync != null) return await MainThread.InvokeAsync(() => _sync(args), timeout).ConfigureAwait(false);
+
+        Task<JsonObject> started = await MainThread.InvokeAsync(() => _async!(args), timeout).ConfigureAwait(false);
+        var finished = await Task.WhenAny(started, Task.Delay(timeout)).ConfigureAwait(false);
+        if (finished != started)
+            throw new BridgeException("timeout", $"AutoCAD did not finish '{Name}' within {timeout.TotalSeconds:0} s");
+        return await started.ConfigureAwait(false);
+    }
+}
 
 internal sealed class BridgeException(string code, string message, int httpStatus = 400) : Exception(message)
 {

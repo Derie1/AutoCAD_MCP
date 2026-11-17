@@ -8,8 +8,10 @@ Needs AutoCAD 2025-2027 running with a drawing open and MCPSTART typed.
 Checks:
   1. HTTP: /health, every route, unknown route, bad JSON.
   2. Concurrency: 100 parallel get_document_info calls must all succeed.
-  3. MCP: spawn server/acad_mcp_server.py over stdio, list tools, call each.
-Read-only: nothing in the drawing is changed.
+  3. Write tools (create, undo): ONLY in a new, unnamed, empty drawing (Drawing1.dwg with
+     0 objects); skipped otherwise, so real drawings are never touched. Everything the
+     test creates is undone at the end.
+  4. MCP: spawn server/acad_mcp_server.py over stdio, list tools, call the read-only ones.
 """
 
 from __future__ import annotations
@@ -81,6 +83,61 @@ def test_concurrency(base: str, n: int = 100) -> None:
     check("AutoCAD still answers after the burst", status == 200 and h.get("ok") is True)
 
 
+READ_ONLY_TOOLS = {"health_check", "get_document_info", "find_entities"}
+
+
+def post(base: str, route: str, **args) -> tuple[int, dict]:
+    return http(base, "POST", route, json.dumps(args).encode("utf-8"))
+
+
+def count(base: str, **filters) -> int:
+    _, r = post(base, "find_entities", **filters)
+    return r.get("total", -1)
+
+
+def test_write(base: str) -> None:
+    print("Write tools (step 1: find_entities, create_line, undo)")
+    _, d = post(base, "get_document_info")
+    if d.get("is_saved_to_file") or d.get("counts", {}).get("model_space_entities") != 0:
+        print(f"    SKIPPED: active drawing {d.get('name')} is not a new empty drawing")
+        return
+
+    check("find_entities on empty drawing -> 0", count(base) == 0)
+    s, a = post(base, "create_line", start=[0, 0], end=[100, 0])
+    check("create_line ok", s == 200 and a.get("type") == "LINE" and a.get("length") == 100, str(a))
+    s, b = post(base, "create_line", start=[0, 50, 0], end=[30, 90], layer="0", color=1)
+    check("create_line with layer + color", s == 200 and b.get("color") == 1 and b.get("layer") == "0", str(b))
+    check("find_entities types=LINE -> 2", count(base, types="LINE") == 2)
+    check("find_entities window inside -> 1",
+          count(base, window={"min": [-1, -1], "max": [101, 1]}) == 1)
+    check("find_entities window crossing -> 2",
+          count(base, window={"min": [-1, -1], "max": [10, 60], "mode": "crossing"}) == 2)
+    check("find_entities layers wildcard", count(base, layers="0*") == 2)
+    check("find_entities types=TABLE -> 0", count(base, types="TABLE") == 0)
+    s, p = post(base, "find_entities", limit=1)
+    check("paging: limit 1 of 2", p.get("count") == 1 and p.get("has_more") is True, str(p))
+    items = post(base, "find_entities")[1].get("items", [])
+    check("handles are returned", all(i.get("handle") for i in items) and len(items) == 2)
+
+    s, e = post(base, "create_line", start=[1, 1], end=[1, 1])
+    check("create_line same points -> bad_request", s == 400 and e.get("code") == "bad_request", str(e))
+    s, e = post(base, "create_line", start=[0, 0], end=[1, 1], layer="NO_SUCH_LAYER")
+    check("create_line unknown layer -> not_found", s == 404, str(e))
+    s, e = post(base, "find_entities", window={"min": [0, 0], "max": [1, 1], "mode": "around"})
+    check("find_entities bad window mode -> bad_request", s == 400, str(e))
+    check("failed calls left nothing behind", count(base) == 2)
+
+    s, e = post(base, "undo", steps=5)
+    check("undo more than recorded -> bad_request", s == 400, str(e))
+    s, u = post(base, "undo")
+    check("undo ok", s == 200 and u.get("undone") == 1, str(u))
+    check("one undo reverts exactly one call -> 1 line left", count(base) == 1)
+    s, u = post(base, "undo")
+    check("second undo -> 0 lines", s == 200 and count(base) == 0, str(u))
+    s, e = post(base, "undo")
+    check("undo with nothing recorded -> nothing_to_undo", s == 409 and e.get("code") == "nothing_to_undo", str(e))
+
+
 async def test_mcp(port: int) -> None:
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -94,7 +151,7 @@ async def test_mcp(port: int) -> None:
             await session.initialize()
             tools = {t.name for t in (await session.list_tools()).tools}
             check("tools listed", {"health_check", "get_document_info"} <= tools, str(tools))
-            for name in sorted(tools):
+            for name in sorted(tools & READ_ONLY_TOOLS):
                 res = await session.call_tool(name, {})
                 check(f"call {name}", not getattr(res, "is_error", False) and not getattr(res, "isError", False),
                       str(res)[:300])
@@ -111,6 +168,7 @@ def main() -> int:
         print(f"Bridge not reachable at {base}: {e}. Type MCPSTART in AutoCAD.")
         return 2
     test_concurrency(base)
+    test_write(base)
     asyncio.run(test_mcp(args.port))
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1

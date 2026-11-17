@@ -9,8 +9,17 @@ internal static class Routes
     {
         var list = new List<Route>
         {
-            new("health_check", OnMainThread: false, SystemHandlers.Health),
-            new("get_document_info", OnMainThread: true, DocumentHandlers.GetDocumentInfo),
+            Route.Http("health_check", SystemHandlers.Health),
+            Route.Main("get_document_info", DocumentHandlers.GetDocumentInfo),
+
+            // query
+            Route.Main("find_entities", QueryHandlers.FindEntities),
+
+            // draw
+            Route.Main("create_line", DrawHandlers.CreateLine),
+
+            // edit
+            Route.Async("undo", EditHandlers.Undo),
         };
         return list.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
     }

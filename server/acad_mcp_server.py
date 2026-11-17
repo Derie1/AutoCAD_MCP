@@ -20,12 +20,13 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server import MCPServer
+from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.1.1"
+SERVER_VERSION = "0.1.2"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))
@@ -131,6 +132,69 @@ async def get_document_info() -> dict[str, Any]:
     paper layouts, the command in progress (if any) and the number of open drawings.
     """
     return await call("get_document_info")
+
+
+# ---------------------------------------------------------------- shared parameter types
+
+Point = Annotated[list[float], Field(min_length=2, max_length=3, description="[x, y] or [x, y, z] in WCS drawing units")]
+Color = Annotated[
+    str | int | None,
+    Field(description='"ByLayer", "ByBlock", an ACI index 1-255 or "#RRGGBB". Default: the current color (usually ByLayer).'),
+]
+Layer = Annotated[str | None, Field(description="Existing layer name. Default: the current layer.")]
+NameList = str | list[str] | None
+
+
+# ---------------------------------------------------------------- query
+
+@mcp.tool()
+async def find_entities(
+    types: Annotated[NameList, Field(description=(
+        'DXF type names, e.g. "LINE", ["LWPOLYLINE", "INSERT"]. Aliases: "TABLE" (AutoCAD tables, ACAD_TABLE), '
+        '"BLOCK" (block references, INSERT), "POLYLINE" (LWPOLYLINE + POLYLINE), "TEXT_ANY" (TEXT + MTEXT).'))] = None,
+    layers: Annotated[NameList, Field(description="Layer names; * and ? wildcards allowed.")] = None,
+    blocks: Annotated[NameList, Field(description="Block names for block references (dynamic blocks by definition name); wildcards allowed.")] = None,
+    window: Annotated[dict[str, Any] | None, Field(description=(
+        'Area in XY: {"min": [x, y], "max": [x, y], "mode": "inside" | "crossing"}. '
+        '"inside" (default) = entirely inside, "crossing" = touches the area.'))] = None,
+    space: Annotated[str, Field(description='"all" (default), "model", "paper" (all layouts) or a layout name.')] = "all",
+    offset: Annotated[int, Field(ge=0, description="Skip this many results (paging).")] = 0,
+    limit: Annotated[int, Field(ge=1, le=2000, description="Maximum results to return (default 200).")] = 200,
+) -> dict[str, Any]:
+    """Find entities in the active drawing by type, layer, block name, area and space.
+
+    All filters combine with AND. Returns {total, offset, count, has_more, items}; each item has
+    handle, type, layer, color, linetype, lineweight, space (Model / layout name), block (for
+    block references) and bounds {min, max}. Use the handle to address the entity in other tools.
+    Read-only.
+    """
+    return await call("find_entities", types=types, layers=layers, blocks=blocks, window=window,
+                      space=space, offset=offset, limit=limit)
+
+
+# ---------------------------------------------------------------- draw
+
+@mcp.tool()
+async def create_line(start: Point, end: Point, layer: Layer = None, color: Color = None) -> dict[str, Any]:
+    """Draw a line from start to end in the current space (model space or the active layout).
+
+    Returns the new entity (handle, type, layer, color, bounds) and its length.
+    The call is one step for the undo tool.
+    """
+    return await call("create_line", start=start, end=end, layer=layer, color=color)
+
+
+# ---------------------------------------------------------------- edit
+
+@mcp.tool()
+async def undo(steps: Annotated[int, Field(ge=1, le=100, description="How many MCP changes to revert.")] = 1) -> dict[str, Any]:
+    """Revert the last change(s) made through these tools, using AutoCAD's UNDO.
+
+    Each changing tool call is exactly one undo step. Refuses if the user has run any command in
+    AutoCAD since the last MCP change, so the user's own work is never undone; in that case ask
+    the user to use UNDO in AutoCAD. Returns {undone, remaining_mcp_changes}.
+    """
+    return await call("undo", steps=steps)
 
 
 def main() -> None:

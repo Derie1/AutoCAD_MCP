@@ -14,7 +14,7 @@ namespace AcadMcpBridge;
 /// </summary>
 public sealed class BridgeApp : IExtensionApplication
 {
-    public const string PluginVersion = "0.1.1";
+    public const string PluginVersion = "0.1.2";
 
     internal static BridgeServer? Server { get; private set; }
 
@@ -24,6 +24,7 @@ public sealed class BridgeApp : IExtensionApplication
     public void Initialize()
     {
         MainThread.Init();
+        UndoTracker.Init();
         Host = HostInfo.Capture();
         Log.Info($"Loaded {PluginVersion} ({BuildInfo.Series}) in {Host.Product} {Host.AcadVer}, .NET {Environment.Version}");
     }
