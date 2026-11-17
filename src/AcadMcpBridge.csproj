@@ -27,11 +27,12 @@
   <PropertyGroup>
     <AssemblyName>AcadMcpBridge</AssemblyName>
     <RootNamespace>AcadMcpBridge</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
     <DefineConstants>$(DefineConstants);ACAD_$(AcadSeries)</DefineConstants>
     <OutputPath>..\bin\$(Configuration)\$(AcadSeries)\</OutputPath>
@@ -43,5 +44,15 @@
   <ItemGroup>
     <!-- Compile against AutoCAD's managed API; never ship AutoCAD's DLLs. -->
     <PackageReference Include="AutoCAD.NET" Version="$(AcadNetVersion)" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ribbon icons (tools\Make-Icons.ps1), loaded by name: McpStart_32.png etc. -->
+    <EmbeddedResource Include="Resources\*.png" LogicalName="%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- UseWPF drops System.IO from the implicit usings (System.Windows.Shapes.Path clash). -->
+    <Using Include="System.IO" />
   </ItemGroup>
 </Project>

@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from pydantic import Field
 from mcp.server.mcpserver.exceptions import ToolError
 
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.2.1"
 PORT = int(os.environ.get("ACAD_MCP_PORT", "8766"))
 TOKEN = os.environ.get("ACAD_MCP_TOKEN", "")
 TIMEOUT = float(os.environ.get("ACAD_MCP_TIMEOUT", "60"))

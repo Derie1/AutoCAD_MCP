@@ -111,7 +111,7 @@ Claude ──stdio/MCP──► acad_mcp_server.py ──HTTP JSON──► Acad
    поддерживаемые (2025–2027), `U` — удалить, `Q` — выход.
 5. Установщик подготовит окружение Python и спросит, зарегистрировать ли сервер `autocad`
    в Claude Desktop (`Y`/`N`). После этого перезапустите Claude.
-6. Запустите AutoCAD и введите **`MCPSTART`**.
+6. Запустите AutoCAD и введите **`MCPSTART`** (или кнопка **Start** на панели **AI companion** вкладки «Главная»).
 
 Без вопросов: `INSTALL.BAT 2026`, `INSTALL.BAT A`, `INSTALL.BAT U`; язык — вторым параметром,
 `INSTALL.BAT 2026 RU` (по умолчанию `EN`). В этом режиме сервер регистрируется в Claude Desktop без вопроса.
@@ -176,6 +176,13 @@ claude mcp add autocad -- "<AutoCAD_MCP>\.venv\Scripts\python.exe" "%APPDATA%\Au
 ## Запуск
 
 В AutoCAD: **`MCPSTART`** — включить мост, `MCPSTATUS` — состояние, `MCPSTOP` — выключить.
+
+То же — кнопками на ленте: вкладка **Главная (Home)** → панель **AI companion** →
+**Start** / **Stop** / **Status**. Панель добавляет сам плагин при загрузке (API ленты), файлы
+настройки AutoCAD (CUIx) не меняются; после удаления плагина панель исчезает. Если в рабочем
+пространстве нет вкладки «Главная», панель появляется на своей вкладке «AI companion».
+Иконки — `src\Resources\McpStart|McpStop|McpStatus_16|32.png`, рисуются `tools\Make-Icons.ps1`
+(можно заменить своими PNG тех же имён и размеров).
 Проверка без MCP-клиента: `Invoke-RestMethod http://localhost:8766/health`.
 
 ## Настройки

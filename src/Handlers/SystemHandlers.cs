@@ -25,6 +25,7 @@ internal static class SystemHandlers
             ["dotnet"] = Environment.Version.ToString(),
             ["port"] = s?.Port,
             ["routes"] = s?.RouteCount,
+            ["ribbon"] = RibbonUi.State,
             ["requests"] = s?.RequestCount,
         };
     }
