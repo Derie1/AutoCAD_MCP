@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    AutoCAD MCP server: a small stdio MCP server started by the AI client (Claude Desktop,
+    Claude Code, Codex). It forwards tool calls to the AcadMcpBridge plugin inside AutoCAD over
+    http://localhost:8766/. Replaces the Python server of versions up to 0.2.x.
+
+    A framework-dependent DLL started as "dotnet.exe acad_mcp_server.dll": it uses the .NET runtime
+    that AutoCAD 2025-2027 installs (net8.0, rolls forward to .NET 10) and needs no NuGet packages.
+    No .exe on purpose: application control on managed PCs often blocks unsigned executables in
+    user folders (seen on the development PC: "Access is denied"), while dotnet.exe is signed.
+
+      dotnet publish -c Release -p:Version=<ver>    (Build-Package.ps1 does this)
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <AssemblyName>acad_mcp_server</AssemblyName>
+    <RootNamespace>AcadMcpServer</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseAppHost>false</UseAppHost>
+    <SelfContained>false</SelfContained>
+    <DebugType>embedded</DebugType>
+    <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
+    <PublishDir>..\..\bin\Release\Server\</PublishDir>
+    <OutputPath>..\..\bin\$(Configuration)\ServerBuild\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Tool names, descriptions and input schemas: the single source for what the AI sees. -->
+    <EmbeddedResource Include="tools.json" LogicalName="tools.json" />
+  </ItemGroup>
+</Project>

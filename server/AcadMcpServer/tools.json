@@ -1,0 +1,2162 @@
+{
+  "instructions": "Tools that control a running AutoCAD 2025-2027 through the AcadMcpBridge plugin. If a tool says the bridge is not reachable, ask the user to press Start on the AI companion panel (Home tab) in AutoCAD or to type MCPSTART. Coordinates are [x, y, z] in drawing units (WCS); see get_document_info for the units. Every changing tool call is one step for the undo tool.",
+  "tools": [
+    {
+      "name": "health_check",
+      "description": "Check that AutoCAD is running with the MCP bridge started.\n\nReturns plugin version, AutoCAD product and build, .NET version, port and\nnumber of available routes. Answers even while AutoCAD is busy.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_document_info",
+      "description": "Summary of the active drawing in AutoCAD.\n\nReturns file name and path, unsaved changes, read-only flag, DWG version,\nunits (INSUNITS, metric/imperial), drawing extents, current layer, space and\nlayout, counts of model-space entities / layers / block definitions /\npaper layouts, the command in progress (if any) and the number of open drawings.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "find_entities",
+      "description": "Find entities in the active drawing by type, layer, block name, area, space and text.\n\nAll filters combine with AND. Returns {total, offset, count, has_more, items}; each item has\nhandle, type, layer, color, linetype, lineweight, space (Model / layout name), block (for\nblock references) and bounds {min, max}. Use the handle to address the entity in other tools.\nRead-only.",
+      "inputSchema": {
+        "properties": {
+          "types": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DXF type names, e.g. \"LINE\", [\"LWPOLYLINE\", \"INSERT\"]. Aliases: \"TABLE\" (AutoCAD tables, ACAD_TABLE), \"BLOCK\" (block references, INSERT), \"POLYLINE\" (LWPOLYLINE + POLYLINE), \"TEXT_ANY\" (TEXT + MTEXT)."
+          },
+          "layers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Layer names; * and ? wildcards allowed."
+          },
+          "blocks": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Block names for block references (dynamic blocks by definition name); wildcards allowed."
+          },
+          "window": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Area in XY: {\"min\": [x, y], \"max\": [x, y], \"mode\": \"inside\" | \"crossing\"}. \"inside\" (default) = entirely inside, \"crossing\" = touches the area."
+          },
+          "space": {
+            "default": "all",
+            "description": "\"all\" (default), \"model\", \"paper\" (all layouts) or a layout name.",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text pattern, * and ? wildcards, case-insensitive; use *word* to search for a substring. Matches TEXT/MTEXT content, block attribute values, dimension text overrides and AutoCAD table cells; other types never match."
+          },
+          "offset": {
+            "default": 0,
+            "description": "Skip this many results (paging).",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 200,
+            "description": "Maximum results to return (default 200).",
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_entity_properties",
+      "description": "Full properties of entities by handle.\n\nCommon: handle, type, layer, color, linetype, lineweight, space, bounds, visible, transparency.\nPlus per type: LINE start/end/length/angle; CIRCLE center/radius/area; ARC angles/length;\nLWPOLYLINE vertices (with bulges, widths), closed, length, area; TEXT/MTEXT text, position,\nheight, rotation, style (MTEXT also raw \"contents\" with formatting codes); INSERT block,\nposition, rotation, scale, attributes [{tag, value}], dynamic block properties; DIMENSION\nmeasurement and text override; HATCH pattern/area; ACAD_TABLE size and style (cell contents:\nget_table). An unknown handle gives an item with \"error\" instead of failing the whole call.",
+      "inputSchema": {
+        "properties": {
+          "handles": {
+            "description": "Entity handles from find_entities or get_selection.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "include_xdata": {
+            "default": false,
+            "description": "Also return extended data (XData).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "handles"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_selection",
+      "description": "Objects the user has selected in AutoCAD right now (selected before calling, with grips shown).\n\nReturns {total, count, has_more, items} with the same entity summary as find_entities.\nUse it when the user says \"this\", \"these objects\", \"the selected table\".",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "default": 200,
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_system_variable",
+      "description": "Read AutoCAD system variables. Returns {values: {NAME: value}}; unknown names get {\"error\": ...}.",
+      "inputSchema": {
+        "properties": {
+          "names": {
+            "description": "System variable names, e.g. [\"INSUNITS\", \"LTSCALE\", \"CLAYER\"].",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "names"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_documents",
+      "description": "Drawings open in AutoCAD: name, path (null if never saved), active, read_only,\nhas_unsaved_changes (known only for the active drawing). All other tools work on the active drawing.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_layers",
+      "description": "Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,\nplottable, current, from_xref, description and the number of entities on each.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Layer name filter with * and ? wildcards."
+          },
+          "with_counts": {
+            "default": true,
+            "description": "Count entities per layer (model space and layouts).",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_blocks",
+      "description": "Block definitions: name, dynamic, references (number of insertions, dynamic blocks included),\nentities, attribute definitions [{tag, prompt, default, constant, invisible}], origin, units.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Block name filter with * and ? wildcards."
+          },
+          "include_anonymous": {
+            "default": false,
+            "type": "boolean"
+          },
+          "include_xrefs": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_layouts",
+      "description": "Model and paper layouts in tab order: name, current, entities, viewports, plot device,\npaper size, plot style table and rotation.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_xrefs",
+      "description": "External references: name, saved path, status (Resolved, Unloaded, FileNotFound, ...),\noverlay or attachment, nested, number of references.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_styles",
+      "description": "Named styles of the drawing with the current one marked. Text styles include font,\nheight, width factor and oblique angle; dimension styles text height, arrow size, scale.",
+      "inputSchema": {
+        "properties": {
+          "kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Which styles: any of \"text\", \"dimension\", \"table\", \"multileader\", \"linetype\". Default: all."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_table",
+      "description": "Read the contents of an AutoCAD table (ACAD_TABLE).\n\nReturns rows/columns count, range read, cells as a 2D array [row][column] (0-based; row 0 is\nusually the title, row 1 the header; see row_styles: _TITLE/_HEADER/_DATA), row_heights,\ncolumn_widths, merged ranges [top, left, bottom, right] (only the top-left cell of a merged\nrange has the value, the others are null), formulas [{row, column, formula, value}],\nlocked_cells (content locked or read-only, e.g. linked to Excel: they cannot be written),\nblock_cells (block name and attribute values), data_links and, if the user has selected\ncells inside the table, selected_cells. Tables over 5000 cells are returned in parts:\n\"truncated\" is true and \"hint\" says which rows to read next.",
+      "inputSchema": {
+        "properties": {
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Handle of the AutoCAD table (find_entities types=TABLE). Omit to use the one table the user has selected, or the only table in the drawing."
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "[first, last], 0-based, inclusive."
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "[first, last], 0-based, inclusive."
+          },
+          "format": {
+            "default": "plain",
+            "description": "\"plain\" (default): displayed text without formatting codes; \"raw\": text with MTEXT formatting codes; \"value\": typed values (numbers stay numbers).",
+            "type": "string"
+          },
+          "details": {
+            "default": false,
+            "description": "Return each cell as an object {value, formula, locked, linked, merged_into, data_type}.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "extract_block_attributes",
+      "description": "Attribute values of block references as a table, e.g. for a schedule or an Excel export.\n\nReturns {total, offset, count, has_more, columns, rows}: columns are handle, block, space,\nlayer, position and then one column per attribute tag; rows hold the values (null when a\nblock has no such tag). Read-only.",
+      "inputSchema": {
+        "properties": {
+          "blocks": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Block names, wildcards allowed. Default: all blocks with attributes."
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only these attribute tags (columns). Default: all tags found."
+          },
+          "layers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Layer filter, wildcards allowed."
+          },
+          "space": {
+            "default": "all",
+            "description": "\"all\" (default), \"model\", \"paper\" or a layout name.",
+            "type": "string"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "{\"min\": [x, y], \"max\": [x, y], \"mode\": \"inside\" | \"crossing\"}"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 500,
+            "maximum": 5000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_table_cells",
+      "description": "Fill cells of an AutoCAD table.\n\nValues: text (MTEXT codes kept), numbers, \"=formula\" (e.g. \"=Sum(B3:B5)\"; columns are\nletters, rows 1-based as AutoCAD shows them), or null to clear. Inside a merged range write to\nits top-left cell. Locked cells (also cells linked to Excel) are never written: the call fails\nwith cell_locked, nothing changes, and the user must unlock them in AutoCAD first. Cells with\nblocks are not overwritten. Read the table with get_table first. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Table handle (find_entities types=TABLE). Omit to use the one table the user has selected, or the only table in the drawing."
+          },
+          "cells": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Single cells: [{\"row\": 2, \"column\": 1, \"value\": \"5.5\"}, ...] (0-based, as in get_table)."
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A block of values [[row1...], [row2...]] written from 'start'. Use instead of cells."
+          },
+          "start": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "[row, column] of the top-left cell for 'values'. Omit to start at the cells the user has selected in the table."
+          },
+          "add_rows": {
+            "default": false,
+            "description": "Append rows (copying the last row's format) when values run past the end.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "modify_table",
+      "description": "Change the structure of an AutoCAD table: insert or delete rows and columns (new ones copy\nthe format of their neighbour), merge or unmerge cells, set column widths and row heights.\nDeleting rows/columns with locked cells is refused. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "operation": {
+            "description": "\"insert_rows\", \"delete_rows\", \"insert_columns\", \"delete_columns\", \"merge\", \"unmerge\", \"set_column_width\" or \"set_row_height\".",
+            "type": "string"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Table handle (find_entities types=TABLE). Omit to use the one table the user has selected, or the only table in the drawing."
+          },
+          "at": {
+            "default": 0,
+            "description": "Row/column index (0-based). insert: new rows/columns go before it; = row/column count appends.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "count": {
+            "default": 1,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "range": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "merge/unmerge: [top_row, left_column, bottom_row, right_column]."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Column width (insert_columns, set_column_width)."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Row height (insert_rows, set_row_height)."
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_table",
+      "description": "Create an AutoCAD table from data, e.g. an equipment schedule. Values follow the rules of\nset_table_cells (text, numbers, \"=formula\"). Returns the handle, size and bounds. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "position": {
+            "description": "Top-left corner [x, y].",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "data": {
+            "description": "Rows of cell values; the first row is the header when header is true.",
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Title row above the data, merged across all columns."
+          },
+          "header": {
+            "default": true,
+            "description": "Format the first data row as the header.",
+            "type": "boolean"
+          },
+          "column_widths": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "One width for all columns or one per column."
+          },
+          "row_height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Table style name (list_styles). Default: the current style."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          }
+        },
+        "required": [
+          "position",
+          "data"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_line",
+      "description": "Draw a line from start to end in the current space (model space or the active layout).\n\nReturns the new entity (handle, type, layer, color, bounds) and its length.\nThe call is one step for the undo tool.",
+      "inputSchema": {
+        "properties": {
+          "start": {
+            "description": "[x, y] or [x, y, z] in WCS drawing units",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "end": {
+            "description": "[x, y] or [x, y, z] in WCS drawing units",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_polyline",
+      "description": "Draw a 2D polyline (LWPOLYLINE), optionally closed and with arc segments.\nReturns the new entity with vertices, length and area (if closed). One undo step.",
+      "inputSchema": {
+        "properties": {
+          "points": {
+            "description": "Vertices [[x, y], ...].",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          },
+          "closed": {
+            "default": false,
+            "type": "boolean"
+          },
+          "bulges": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "One bulge per vertex for the segment that starts there: 0 = straight, 1 = half circle counter-clockwise, -1 = clockwise, tan(angle/4) in general."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Constant width."
+          },
+          "elevation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_circle",
+      "description": "Draw a circle. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "center": {
+            "description": "[x, y] or [x, y, z] in WCS drawing units",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "radius": {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "center",
+          "radius"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_arc",
+      "description": "Draw an arc from center + radius + start/end angles, or through three points. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "center": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "With radius and angles."
+          },
+          "radius": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "start_angle_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "0 = +X axis; the arc runs counter-clockwise to end_angle_deg."
+          },
+          "end_angle_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "points": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Or three points [start, middle, end] on the arc."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_text",
+      "description": "Single-line text (TEXT). For several lines or formatting use create_mtext. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "position": {
+            "description": "[x, y] or [x, y, z] in WCS drawing units",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height in drawing units. Default: TEXTSIZE."
+          },
+          "rotation_deg": {
+            "default": 0,
+            "type": "number"
+          },
+          "justify": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Which point of the text sits at position: BaseLeft (default), BaseCenter, BaseRight, TopLeft, TopCenter, TopRight, MiddleLeft, MiddleCenter, MiddleRight, BottomLeft, BottomCenter, BottomRight."
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style name (list_styles). Default: the current style."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "text",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_mtext",
+      "description": "Multiline text (MTEXT). One undo step.",
+      "inputSchema": {
+        "properties": {
+          "text": {
+            "description": "Text; line breaks become paragraphs. MTEXT codes (\\P, {\\fArial;...}) are kept.",
+            "type": "string"
+          },
+          "position": {
+            "description": "[x, y] or [x, y, z] in WCS drawing units",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "width": {
+            "default": 0,
+            "description": "Wrapping width; 0 = no wrapping.",
+            "minimum": 0,
+            "type": "number"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height in drawing units. Default: TEXTSIZE."
+          },
+          "rotation_deg": {
+            "default": 0,
+            "type": "number"
+          },
+          "attachment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Which point sits at position: TopLeft (default), MiddleCenter, BottomRight, ..."
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style name (list_styles). Default: the current style."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "text",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_dimension",
+      "description": "Create a linear or aligned dimension. Returns it with the measurement. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "p1": {
+            "description": "First measured point.",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "p2": {
+            "description": "Second measured point.",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "dim_line_point": {
+            "description": "A point the dimension line passes through.",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "default": "aligned",
+            "description": "\"aligned\" (parallel to p1-p2, default) or \"linear\" (horizontal by default, see angle_deg).",
+            "type": "string"
+          },
+          "angle_deg": {
+            "default": 0,
+            "description": "linear: dimension line angle; 0 = horizontal, 90 = vertical.",
+            "type": "number"
+          },
+          "text_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Replace the measured text; \"<>\" stands for the measurement."
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Dimension style name. Default: the current style."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "p1",
+          "p2",
+          "dim_line_point"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "insert_block",
+      "description": "Insert a block reference with attribute values and dynamic properties.\nUnknown tags or properties are refused with the list of valid ones. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Block defined in this drawing (list_blocks).",
+            "type": "string"
+          },
+          "position": {
+            "description": "[x, y] or [x, y, z] in WCS drawing units",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              }
+            ],
+            "default": 1,
+            "description": "Uniform factor or [x, y] / [x, y, z]."
+          },
+          "rotation_deg": {
+            "default": 0,
+            "type": "number"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "{TAG: value}; tags not given get their default values."
+          },
+          "dynamic_properties": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Dynamic block properties {name: value} (see get_entity_properties)."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          }
+        },
+        "required": [
+          "name",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "update_block_attributes",
+      "description": "Change attribute values of block references, e.g. fill a schedule from user data.\n\nReturns {blocks, attributes_changed} and lists tags that some blocks do not have.\nBlocks on locked layers make the call fail. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "{TAG: value} applied to every chosen block (with handles or filter)."
+          },
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Entity handles to act on (from find_entities / get_selection). Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."
+          },
+          "updates": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Different values per block: [{\"handle\": \"2A\", \"values\": {\"NAME\": \"P-1\"}}, ...]. Use instead of values + handles/filter."
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Change nothing; report how many and which objects would be affected.",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required when objects are chosen by filter. Ask the user before bulk changes.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "undo",
+      "description": "Revert the last change(s) made through these tools, using AutoCAD's UNDO.\n\nEach changing tool call is exactly one undo step. Refuses if the user has run any command in\nAutoCAD since the last MCP change, so the user's own work is never undone; in that case ask\nthe user to use UNDO in AutoCAD. Returns {undone, remaining_mcp_changes}.",
+      "inputSchema": {
+        "properties": {
+          "steps": {
+            "default": 1,
+            "description": "How many MCP changes to revert.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_entity_properties",
+      "description": "Change layer, color, linetype, lineweight, linetype scale, transparency or visibility of objects.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.",
+      "inputSchema": {
+        "properties": {
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Entity handles to act on (from find_entities / get_selection). Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Move to this existing layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25."
+          },
+          "linetype_scale": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "transparency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\" or percent 0-90."
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Change nothing; report how many and which objects would be affected.",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required when objects are chosen by filter. Ask the user before bulk changes.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "transform_entities",
+      "description": "Move, copy (also as a linear array), rotate, scale or mirror objects.\n\nReturns {operation, affected} and, for copy and mirror with keep_original, created_handles.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.",
+      "inputSchema": {
+        "properties": {
+          "operation": {
+            "description": "\"move\", \"copy\", \"rotate\", \"scale\" or \"mirror\".",
+            "type": "string"
+          },
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Entity handles to act on (from find_entities / get_selection). Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."
+          },
+          "vector": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "move/copy: displacement [dx, dy] or [dx, dy, dz] (or give from + to)."
+          },
+          "from_point": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "move/copy: base point (with to)."
+          },
+          "to": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "move/copy: target point."
+          },
+          "count": {
+            "default": 1,
+            "description": "copy: number of copies, each one more displacement further (an array).",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "rotate/scale: base point."
+          },
+          "angle_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "rotate: angle in degrees, counter-clockwise."
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "scale: factor."
+          },
+          "p1": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mirror: first point of the mirror line."
+          },
+          "p2": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mirror: second point of the mirror line."
+          },
+          "keep_original": {
+            "default": true,
+            "description": "mirror: keep the originals (default true).",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Change nothing; report how many and which objects would be affected.",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required when objects are chosen by filter. Ask the user before bulk changes.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "delete_entities",
+      "description": "Delete objects. Returns {deleted}. Ask the user before deleting objects they did not ask about.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.",
+      "inputSchema": {
+        "properties": {
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Entity handles to act on (from find_entities / get_selection). Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Change nothing; report how many and which objects would be affected.",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required when objects are chosen by filter. Ask the user before bulk changes.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_selection",
+      "description": "Select objects in AutoCAD for the user (shows grips), e.g. to point at what was found.\nDoes not change the drawing.",
+      "inputSchema": {
+        "properties": {
+          "handles": {
+            "description": "Objects to select with grips in AutoCAD; [] clears the selection.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "handles"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_system_variable",
+      "description": "Set an AutoCAD system variable. Returns {name, old, new}. Read-only variables are refused.\nCounts as one undo step.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "New value; type must fit the variable."
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_layer",
+      "description": "Create a new layer. Fails with already_exists if the name is taken (then use set_layer_state).",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ACI index 1-255 or \"#RRGGBB\"."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name; loaded from acadiso.lin/acad.lin if missing."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"Default\" or millimetres, e.g. 0.35."
+          },
+          "plottable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "current": {
+            "default": false,
+            "description": "Make it the current layer.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_layer_state",
+      "description": "Turn layers on/off, freeze/thaw, lock/unlock, set plottable, color, linetype, lineweight,\ndescription, make current or rename. Only the given settings change. The current layer\ncannot be frozen. Returns the changed layers.",
+      "inputSchema": {
+        "properties": {
+          "names": {
+            "description": "Layer names, * and ? wildcards allowed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "frozen": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "plottable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "current": {
+            "default": false,
+            "description": "Make the (single) layer current.",
+            "type": "boolean"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ACI index 1-255 or \"#RRGGBB\"."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"Default\" or millimetres."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Rename (exactly one layer, no wildcards)."
+          }
+        },
+        "required": [
+          "names"
+        ],
+        "type": "object"
+      }
+    }
+  ]
+}

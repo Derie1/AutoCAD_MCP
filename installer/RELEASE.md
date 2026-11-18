@@ -6,13 +6,16 @@
 
 ## Что это
 
-Плагин для AutoCAD, который даёт ИИ-ассистенту (Claude и другим клиентам MCP) доступ к открытому
-чертежу. Вы пишете задачу обычным языком — «найди все насосы и выгрузи их атрибуты», «заполни
-таблицу этими значениями», «переложи тексты на другой слой» — ассистент читает чертёж и вносит
-изменения через инструменты плагина.
+Плагин для AutoCAD, который даёт ИИ-ассистенту — Claude Desktop, Claude Code, Codex или другому
+клиенту MCP — доступ к открытому чертежу. Вы пишете задачу обычным языком — «найди все насосы и
+выгрузи их атрибуты», «заполни таблицу этими значениями», «переложи тексты на другой слой» —
+ассистент читает чертёж и вносит изменения через инструменты плагина.
 
 Плагин работает внутри AutoCAD и включается только по вашей команде; связь идёт лишь внутри
 компьютера (localhost).
+
+**Новое в 0.3.0:** Python больше не нужен — сервер для ИИ-ассистента теперь на .NET и ставится вместе
+с плагином. Установщик подключает не только Claude Desktop, но и Claude Code и Codex.
 
 ## Возможности
 
@@ -48,13 +51,11 @@
 |---|---|
 | Система | Windows 10 или 11, 64 бит |
 | AutoCAD | 2025, 2026 или 2027 (полная версия; AutoCAD LT не поддерживается). Отраслевые версии на базе AutoCAD (например, MEP) тоже загружают плагин |
-| Python | 3.10 или новее с [python.org](https://www.python.org/downloads/); при установке Python отметьте «Add python.exe to PATH» (или используйте стандартный запуск `py`) |
-| Интернет | Нужен один раз при установке: загружается Python-пакет `mcp` |
-| ИИ-клиент | Claude Desktop (установщик подключит его сам) или другой MCP-клиент, например Claude Code |
+| ИИ-клиент | Claude Desktop, Claude Code или Codex (CLI, расширение IDE, приложение) — установщик подключит найденные. Другой MCP-клиент можно подключить вручную |
 | Права | Права администратора не нужны |
 | Порт | Свободный порт 8766 на этом компьютере (меняется в настройках) |
 
-.NET отдельно ставить не нужно — он входит в AutoCAD.
+Больше ничего ставить не нужно: Python и интернет при установке не нужны, среда .NET входит в AutoCAD.
 
 ## Установка
 
@@ -63,38 +64,44 @@
 3. Выберите язык установщика, затем версию AutoCAD (год, например `2026`) или `A` — все поддерживаемые.
 4. Установщик:
    - установит плагин в `%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle`;
-   - создаст окружение Python в `%LOCALAPPDATA%\AcadMcpBridge\venv` и загрузит пакет `mcp`;
-   - предложит подключить сервер `autocad` к Claude Desktop (копия прежних настроек Claude сохраняется).
-5. Перезапустите Claude Desktop.
+   - найдёт Claude Desktop, Claude Code и Codex и для каждого спросит, подключить ли сервер `autocad`
+     (перед правкой настроек клиента сохраняется их копия; другие серверы не затрагиваются).
+5. Перезапустите подключённые ИИ-клиенты.
 6. Запустите AutoCAD и нажмите **Start** на панели **AI companion** (вкладка «Главная»)
    или введите `MCPSTART`.
 
-Если Claude Desktop не найден или вы отказались от подключения, установщик показывает готовую команду
-для подключения вручную (например, в Claude Code).
+Если клиент не найден или вы отказались, установщик в конце показывает готовые команды, чтобы
+подключить его позже.
 
-**Обновление:** запустите `INSTALL.BAT` новой версии — он заменит старую.
-**Удаление:** `INSTALL.BAT`, пункт `U` — удаляются плагин, окружение Python и запись в настройках Claude.
+**Обновление с версии 0.2.x и раньше:** просто запустите `INSTALL.BAT` новой версии. Он сам удалит
+окружение Python прежней версии (`%LOCALAPPDATA%\AcadMcpBridge\venv`) и переведёт Claude Desktop на
+новый сервер; настройки плагина сохраняются. Сам Python остаётся — удалите его через «Приложения»
+Windows, если он больше ничему не нужен. Обновляйте только через `INSTALL.BAT`, а не копированием файлов.
+**Удаление:** `INSTALL.BAT`, пункт `U` — удаляются плагин и запись `autocad` во всех клиентах.
 **Без вопросов:** `INSTALL.BAT 2026 RU`, `INSTALL.BAT A`, `INSTALL.BAT U`.
 
 ## Если что-то не работает
 
 - Ассистент пишет, что AutoCAD недоступен — нажмите **Start** в AutoCAD.
+- Ассистент не видит инструментов AutoCAD — перезапустите его после установки; если не помогло,
+  подключите командой, которую показал установщик.
 - Нет панели **AI companion** — плагин не загрузился: проверьте, что AutoCAD был закрыт при установке, и
   посмотрите журнал `%LOCALAPPDATA%\AcadMcpBridge\log.txt`.
-- Установщик не нашёл Python или не загрузил `mcp` — установите Python / проверьте интернет и запустите
-  `INSTALL.BAT` ещё раз; плагин при этом уже установлен.
 
 ---
 
 ## What it is
 
-An AutoCAD plugin that gives an AI assistant (Claude and other MCP clients) access to the open
-drawing. You describe the task in plain words — "find all pumps and export their attributes",
-"fill the table with these values", "move the texts to another layer" — and the assistant reads
-the drawing and makes the changes through the plugin's tools.
+An AutoCAD plugin that gives an AI assistant — Claude Desktop, Claude Code, Codex or another MCP
+client — access to the open drawing. You describe the task in plain words — "find all pumps and
+export their attributes", "fill the table with these values", "move the texts to another layer" —
+and the assistant reads the drawing and makes the changes through the plugin's tools.
 
 The plugin runs inside AutoCAD and starts only on your command; it talks only within this
 computer (localhost).
+
+**New in 0.3.0:** Python is no longer needed — the server for the AI assistant is now .NET and is
+installed with the plugin. The installer connects Claude Code and Codex as well as Claude Desktop.
 
 ## Features
 
@@ -130,13 +137,11 @@ The **AI companion** panel on the **Home** tab: **Start**, **Stop**, **Status** 
 |---|---|
 | System | Windows 10 or 11, 64-bit |
 | AutoCAD | 2025, 2026 or 2027 (full version; AutoCAD LT is not supported). Toolsets built on AutoCAD (e.g. MEP) load the plugin too |
-| Python | 3.10 or newer from [python.org](https://www.python.org/downloads/); tick "Add python.exe to PATH" during setup (or use the standard `py` launcher) |
-| Internet | Once, during installation: the Python package `mcp` is downloaded |
-| AI client | Claude Desktop (connected by the installer) or another MCP client such as Claude Code |
+| AI client | Claude Desktop, Claude Code or Codex (CLI, IDE extension, app) — the installer connects the ones it finds. Other MCP clients can be connected by hand |
 | Rights | No administrator rights needed |
 | Port | Free port 8766 on this computer (configurable) |
 
-No separate .NET installation is needed — it comes with AutoCAD.
+Nothing else to install: no Python and no internet needed during installation; the .NET runtime comes with AutoCAD.
 
 ## Installation
 
@@ -145,22 +150,24 @@ No separate .NET installation is needed — it comes with AutoCAD.
 3. Choose the installer language, then the AutoCAD version (a year such as `2026`) or `A` for all supported.
 4. The installer:
    - installs the plugin to `%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle`;
-   - creates a Python environment in `%LOCALAPPDATA%\AcadMcpBridge\venv` and downloads the `mcp` package;
-   - offers to connect the `autocad` server to Claude Desktop (a copy of the previous Claude settings is kept).
-5. Restart Claude Desktop.
+   - finds Claude Desktop, Claude Code and Codex and asks for each whether to connect the `autocad`
+     server (a copy of the client's settings is kept before the change; other servers are not touched).
+5. Restart the connected AI clients.
 6. Start AutoCAD and press **Start** on the **AI companion** panel (Home tab), or type `MCPSTART`.
 
-If Claude Desktop is not found or you decline, the installer prints a ready-made command to connect
-manually (e.g. in Claude Code).
+If a client is not found or you decline, the installer prints ready-made commands to connect it later.
 
-**Update:** run `INSTALL.BAT` of the new version — it replaces the old one.
-**Uninstall:** `INSTALL.BAT`, option `U` — removes the plugin, the Python environment and the Claude setting.
+**Update from 0.2.x or earlier:** just run `INSTALL.BAT` of the new version. It removes the Python
+environment of the earlier version (`%LOCALAPPDATA%\AcadMcpBridge\venv`) and switches Claude Desktop to
+the new server; the plugin settings are kept. Python itself stays — remove it in Windows Apps if
+nothing else needs it. Update only with `INSTALL.BAT`, not by copying files.
+**Uninstall:** `INSTALL.BAT`, option `U` — removes the plugin and the `autocad` entry from all clients.
 **Unattended:** `INSTALL.BAT 2026 EN`, `INSTALL.BAT A`, `INSTALL.BAT U`.
 
 ## Troubleshooting
 
 - The assistant says AutoCAD is not reachable — press **Start** in AutoCAD.
+- The assistant does not see the AutoCAD tools — restart it after the installation; if that does not
+  help, connect it with the command the installer printed.
 - No **AI companion** panel — the plugin did not load: make sure AutoCAD was closed during installation
   and check the log `%LOCALAPPDATA%\AcadMcpBridge\log.txt`.
-- The installer found no Python or could not download `mcp` — install Python / check the internet
-  connection and run `INSTALL.BAT` again; the plugin itself is already installed.

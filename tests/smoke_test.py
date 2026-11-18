@@ -11,7 +11,8 @@ Checks:
   3. Write tools (create, undo): ONLY in a new, unnamed, empty drawing (Drawing1.dwg with
      0 objects); skipped otherwise, so real drawings are never touched. Everything the
      test creates is undone at the end.
-  4. MCP: spawn server/acad_mcp_server.py over stdio, list tools, call the read-only ones.
+  4. MCP: spawn "dotnet bin\\Release\\Server\\acad_mcp_server.dll" over stdio, list tools, call the
+     read-only ones, check that bridge errors and arguments pass through.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVER = ROOT / "server" / "acad_mcp_server.py"
+SERVER = ROOT / "bin" / "Release" / "Server" / "acad_mcp_server.dll"  # built by Build-Package.ps1
 
 passed: list[str] = []
 failed: list[str] = []
@@ -284,19 +285,27 @@ async def test_mcp(port: int) -> None:
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
-    print("MCP (stdio)")
+    print(f"MCP (stdio): dotnet {SERVER.name}")
     params = StdioServerParameters(
-        command=sys.executable, args=[str(SERVER)], env={**os.environ, "ACAD_MCP_PORT": str(port)}
+        command="dotnet", args=[str(SERVER)], env={**os.environ, "ACAD_MCP_PORT": str(port)}
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
-            await session.initialize()
+            init = await session.initialize()
+            info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
+            check("server identifies as autocad", getattr(info, "name", None) == "autocad", str(info))
             tools = {t.name for t in (await session.list_tools()).tools}
-            check("tools listed", {"health_check", "get_document_info"} <= tools, str(tools))
+            check("34 tools listed", len(tools) == 34 and {"health_check", "get_table", "set_table_cells"} <= tools, str(len(tools)))
             for name in sorted(tools & READ_ONLY_TOOLS):
                 res = await session.call_tool(name, {})
                 check(f"call {name}", not getattr(res, "is_error", False) and not getattr(res, "isError", False),
                       str(res)[:300])
+            res = await session.call_tool("get_table", {"handle": "1"})
+            text = res.content[0].text if res.content else ""
+            check("bridge errors reach the model", (getattr(res, "is_error", False) or getattr(res, "isError", False))
+                  and "Error executing tool get_table" in text and "[" in text, text[:200])
+            res = await session.call_tool("find_entities", {"types": "LINE", "limit": 1})
+            check("arguments are passed through", '"total"' in (res.content[0].text if res.content else ""), str(res)[:200])
 
 
 def main() -> int:

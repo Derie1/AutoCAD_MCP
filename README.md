@@ -1,15 +1,18 @@
 # AutoCAD MCP Bridge
 
-Управление запущенным AutoCAD 2025–2027 из Claude (и любого MCP-клиента).
-План развития и журнал решений — [PLAN.md](PLAN.md).
+Управление запущенным AutoCAD 2025–2027 из ИИ-ассистента: Claude Desktop, Claude Code, Codex
+(и любого MCP-клиента). План развития и журнал решений — [PLAN.md](PLAN.md).
 
 ```
-Claude ──stdio/MCP──► acad_mcp_server.py ──HTTP JSON──► AcadMcpBridge.dll (внутри acad.exe)
-                                            localhost:8766
+ИИ-клиент ──stdio/MCP──► dotnet acad_mcp_server.dll ──HTTP JSON──► AcadMcpBridge.dll (внутри acad.exe)
+                         (server\AcadMcpServer)       localhost:8766   (src\)
 ```
 
-Независим от Navisworks MCP: свой порт (8766), бандл, Python-сервер и venv — оба
-моста работают одновременно.
+MCP-сервер — небольшая библиотека .NET без зависимостей; клиент запускает её через `dotnet.exe`
+(среда .NET ставится вместе с AutoCAD 2025–2027). Отдельного exe нет намеренно: на управляемых
+компьютерах неподписанные exe в папках пользователя часто блокируются, а `dotnet.exe` подписан.
+До версии 0.2.x сервер был на Python. Независим от Navisworks MCP: свой порт (8766), бандл и
+сервер — оба моста работают одновременно.
 
 ## Версии
 
@@ -18,7 +21,7 @@ Claude ──stdio/MCP──► acad_mcp_server.py ──HTTP JSON──► Acad
 | 2025, 2026 | `Contents\R25` | net8.0 (работает и на .NET 10 после обновлений 2025/2026) |
 | 2027 | `Contents\R26` | net10.0 |
 
-## Что умеет (v0.2.0)
+## Что умеет (v0.3.0)
 
 34 инструмента: Claude читает чертёж, рисует и правит объекты, работает со слоями, блоками и
 таблицами AutoCAD. Все инструменты работают с **активным** чертежом.
@@ -100,8 +103,8 @@ Claude ──stdio/MCP──► acad_mcp_server.py ──HTTP JSON──► Acad
 
 ## Установка у пользователя
 
-Нужно: AutoCAD 2025–2027 (не LT), Python 3.10+ с [python.org](https://www.python.org/downloads/)
-и доступ в интернет при установке (ставится Python-пакет `mcp`). Права администратора не нужны.
+Нужно: AutoCAD 2025–2027 (не LT) и ИИ-клиент (Claude Desktop, Claude Code или Codex). Python,
+интернет и права администратора не нужны.
 
 1. Распакуйте `AutoCAD_MCP_<версия>.zip` в любую папку (не запускайте из архива).
 2. Закройте AutoCAD и запустите `INSTALL.BAT`.
@@ -109,41 +112,47 @@ Claude ──stdio/MCP──► acad_mcp_server.py ──HTTP JSON──► Acad
    Дальше все сообщения на выбранном языке.
 4. Установщик покажет найденные версии AutoCAD и спросит год версии (`2026`), `A` — все
    поддерживаемые (2025–2027), `U` — удалить, `Q` — выход.
-5. Установщик подготовит окружение Python и спросит, зарегистрировать ли сервер `autocad`
-   в Claude Desktop (`Y`/`N`). После этого перезапустите Claude.
-6. Запустите AutoCAD и введите **`MCPSTART`** (или кнопка **Start** на панели **AI companion** вкладки «Главная»).
+5. Установщик найдёт установленные ИИ-клиенты и для каждого спросит, подключить ли сервер
+   `autocad` (`Y`/`N`). Перезапустите подключённые клиенты.
+6. Запустите AutoCAD и нажмите **Start** на панели **AI companion** вкладки «Главная» (или `MCPSTART`).
 
 Без вопросов: `INSTALL.BAT 2026`, `INSTALL.BAT A`, `INSTALL.BAT U`; язык — вторым параметром,
-`INSTALL.BAT 2026 RU` (по умолчанию `EN`). В этом режиме сервер регистрируется в Claude Desktop без вопроса.
+`INSTALL.BAT 2026 RU` (по умолчанию `EN`). В этом режиме сервер подключается ко всем найденным клиентам.
 
 Что делает установщик:
 
 | Шаг | Куда |
 |---|---|
-| Плагин (`AcadMcpBridge.bundle.zip` распаковывается) | `%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle` |
-| Окружение Python с пакетом `mcp` | `%LOCALAPPDATA%\AcadMcpBridge\venv` |
-| Сервер `autocad` в Claude Desktop (копия конфига до правки — `.bak-autocad`) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Плагин и MCP-сервер (`AcadMcpBridge.bundle.zip` распаковывается) | `%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle` (сервер — `Contents\Server\acad_mcp_server.dll`) |
+| Claude Desktop — если есть `%APPDATA%\Claude` | `claude_desktop_config.json`, `mcpServers.autocad` |
+| Codex (CLI, расширение IDE, приложение) — если есть `%USERPROFILE%\.codex` (или `CODEX_HOME`) либо команда `codex` | `config.toml`, таблица `[mcp_servers.autocad]` |
+| Claude Code — если есть команда `claude` | `claude mcp add --scope user autocad …` |
 
+- Перед первой правкой конфига клиента рядом сохраняется копия `<файл>.bak-autocad`; меняется
+  только запись `autocad`, другие серверы (`navisworks`, `Revit` …) и настройки не трогаются.
+- Клиент, в котором `autocad` уже был (от прежней версии), обновляется без вопроса.
+- **Обновление с 0.2.x (Python):** окружение `%LOCALAPPDATA%\AcadMcpBridge\venv` удаляется, файлы
+  Python-сервера из бандла тоже; запись `autocad` в Claude Desktop переводится на новый сервер.
+  Сам Python не удаляется. Запись в Claude Code, сделанную вручную, обновите командой ниже.
+- Подключить клиент позже: `"<dotnet.exe>" "<бандл>\Contents\Server\acad_mcp_server.dll" --register claude-desktop|claude-code|codex`
+  (установщик печатает готовые команды), отключить — `--unregister`.
 - `PackageContents.xml` собирается так, что плагин загружается только в выбранных версиях;
   повторный запуск с другой версией добавляет её (список — `versions.txt` в бандле).
 - Версии до 2025 отклоняются («не поддерживается»), новее 2027 — «нужен новый выпуск».
 - Если выбранная версия не найдена в реестре (`HKLM\SOFTWARE\Autodesk\AutoCAD\R<серия>`) — предупреждает и спрашивает.
 - Не работает при запущенном `acad.exe` (DLL была бы занята).
-- Если нет Python или интернета, плагин всё равно ставится; шаг Python можно повторить, запустив `INSTALL.BAT` снова.
-- Другие серверы в конфиге Claude (`navisworks`, `Revit` …) не трогаются.
-- `U` удаляет плагин, окружение Python и запись `autocad` из конфига Claude; настройки и журнал
+- `U` удаляет плагин, запись `autocad` из всех клиентов и старое окружение Python; настройки и журнал
   (`%LOCALAPPDATA%\AcadMcpBridge`) — по отдельному вопросу.
-- Claude Code CLI установщик не настраивает, а печатает команду
-  `claude mcp add --scope user autocad -- "<venv>\Scripts\python.exe" "<бандл>\Contents\acad_mcp_server.py"`.
 
 ## Installation (English)
 
 1. Unpack `AutoCAD_MCP_<version>.zip` to any folder, close AutoCAD and run `INSTALL.BAT`.
 2. Choose the language (`1` English, `2` Russian), then the AutoCAD year (`2026`), `A` for all
    supported versions (2025–2027), `U` to uninstall or `Q` to quit.
-3. The installer creates a Python environment in `%LOCALAPPDATA%\AcadMcpBridge\venv` (needs Python 3.10+
-   and internet) and offers to register the `autocad` server in Claude Desktop. Restart Claude.
-4. Start AutoCAD and type **`MCPSTART`**.
+3. The installer finds Claude Desktop, Claude Code and Codex and offers to connect the `autocad`
+   server to each. Restart the connected clients. No Python is needed; the Python environment of
+   versions up to 0.2.x is removed.
+4. Start AutoCAD and press **Start** on the **AI companion** panel (Home tab), or type `MCPSTART`.
 
 Unattended: `INSTALL.BAT 2026 EN`, `INSTALL.BAT A`, `INSTALL.BAT U`.
 
@@ -151,30 +160,29 @@ Unattended: `INSTALL.BAT 2026 EN`, `INSTALL.BAT A`, `INSTALL.BAT U`.
 
 ```powershell
 .\Build-Package.ps1           # собрать R25 + R26 -> release\AutoCAD_MCP_<версия>\ и release\AutoCAD_MCP_<версия>.zip
-.\Build-Package.ps1 -Deploy   # то же + установить здесь: INSTALL.BAT A без шагов Python и Claude
+.\Build-Package.ps1 -Deploy   # то же + установить здесь: INSTALL.BAT A без подключения клиентов
 ```
 
 В `release\` копятся архивы всех версий (`AutoCAD_MCP_<версия>.zip`); распакованная папка — только текущей.
 Описание релиза для пользователей (RU + EN): исходник `installer\RELEASE.md`, при сборке кладётся в `release\RELEASE.md`
 и в архив.
 
-Версия — одна, `<Version>` в `src\AcadMcpBridge.csproj`; `PluginVersion` (C#) и `SERVER_VERSION`
-(Python) должны совпадать, иначе сборка остановится. Исходники установщика — папка `installer\`
-(`INSTALL.BAT`, части манифеста `PackageContents\`, `register_claude.py`).
+Версия — одна, `<Version>` в `src\AcadMcpBridge.csproj`; `PluginVersion` (C#) должна совпадать,
+иначе сборка остановится; MCP-сервер публикуется с той же версией. Исходники установщика — папка
+`installer\` (`INSTALL.BAT`, части манифеста `PackageContents\`, `RELEASE.md`).
 Новая версия AutoCAD: строка `SERIES_<год>` и `MAX_YEAR` в `INSTALL.BAT`, файл
 `installer\PackageContents\R<серия>.xml`, при новой серии — сборка в `Build-Package.ps1` и csproj.
 
-Для разработки Python-окружение — в папке проекта:
+**MCP-сервер** (`server\AcadMcpServer`, net8.0 с переходом на .NET 10, без NuGet-пакетов):
+`tools.json` — имена, описания и схемы параметров всех инструментов (то, что видит модель);
+новый инструмент = обработчик в плагине + запись в `tools.json`. Сервер пересылает вызов на маршрут
+моста с тем же именем.
+
+Python в проекте нужен только тестам (`.venv`: пакет `mcp` как MCP-клиент, `pywin32` для тестового чертежа):
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r server\requirements.txt
-```
-
-Подключение к Claude Code вручную:
-
-```powershell
-claude mcp add autocad -- "<AutoCAD_MCP>\.venv\Scripts\python.exe" "%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle\Contents\acad_mcp_server.py"
+.venv\Scripts\python.exe -m pip install mcp -r tests\requirements-dev.txt
 ```
 
 ## Запуск
@@ -197,7 +205,7 @@ claude mcp add autocad -- "<AutoCAD_MCP>\.venv\Scripts\python.exe" "%APPDATA%\Au
 { "port": 8766, "token": "", "requestTimeoutSeconds": 30 }
 ```
 
-Если меняете порт или задаёте токен — те же значения передайте Python-серверу через
+Если меняете порт или задаёте токен — те же значения передайте MCP-серверу через
 переменные `ACAD_MCP_PORT` и `ACAD_MCP_TOKEN`. Лог: `%LOCALAPPDATA%\AcadMcpBridge\log.txt`.
 
 ## Тесты
@@ -213,4 +221,4 @@ claude mcp add autocad -- "<AutoCAD_MCP>\.venv\Scripts\python.exe" "%APPDATA%\Au
 выполняются лишь проверки чтения. Тестовый чертёж (слои, тексты, блок с атрибутом, две таблицы)
 строится через COM AutoCAD (`tests\fixture.py`), независимо от проверяемых инструментов.
 Разделы: `smoke_test.py` (связь, шаги 1–3), `test_edit.py`, `test_draw.py`, `test_tablewrite.py`.
-v0.2.0: 174/174 в AutoCAD 2026 и 2027.
+v0.3.0: 178/178 в AutoCAD 2026 и 2027.

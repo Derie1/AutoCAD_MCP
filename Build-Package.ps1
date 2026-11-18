@@ -12,11 +12,11 @@
   version is replaced by the current one.
 
     .\Build-Package.ps1           # build R25 + R26 and make the release
-    .\Build-Package.ps1 -Deploy   # also install it here: INSTALL.BAT A, without the Python and
-                                  # Claude steps (development uses the project .venv)
+    .\Build-Package.ps1 -Deploy   # also install it here: INSTALL.BAT A, without registering the
+                                  # server in AI clients (they already point at the installed DLL)
 
-  The version comes from <Version> in src\AcadMcpBridge.csproj; the C# and Python
-  version constants must match it.
+  The version comes from <Version> in src\AcadMcpBridge.csproj; BridgeApp.PluginVersion must
+  match it, and the MCP server (server\AcadMcpServer) is published with the same version.
 #>
 param([switch]$Deploy)
 
@@ -28,14 +28,17 @@ $series = 'R25', 'R26'   # R25 = AutoCAD 2025-2026 (net8.0), R26 = AutoCAD 2027 
 $version = ([xml](Get-Content "$root\src\AcadMcpBridge.csproj")).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 if (-not (Select-String -Path "$root\src\BridgeApp.cs" -SimpleMatch "PluginVersion = `"$version`"" -Quiet)) {
     throw "BridgeApp.PluginVersion does not match csproj version $version" }
-if (-not (Select-String -Path "$root\server\acad_mcp_server.py" -SimpleMatch "SERVER_VERSION = `"$version`"" -Quiet)) {
-    throw "acad_mcp_server.py SERVER_VERSION does not match csproj version $version" }
 
 foreach ($s in $series) {
     Write-Host "== Building $s" -ForegroundColor Cyan
     dotnet build "$root\src\AcadMcpBridge.csproj" -c Release -p:AcadSeries=$s -nologo -v:minimal
     if ($LASTEXITCODE -ne 0) { throw "build $s failed" }
 }
+Write-Host "== Publishing the MCP server" -ForegroundColor Cyan
+$serverOut = Join-Path $root 'bin\Release\Server'
+if (Test-Path $serverOut) { Remove-Item $serverOut -Recurse -Force }
+dotnet publish "$root\server\AcadMcpServer\AcadMcpServer.csproj" -c Release -p:Version=$version -nologo -v:minimal
+if ($LASTEXITCODE -ne 0) { throw "server publish failed" }
 
 # ---- bundle, staged outside OneDrive (OneDrive holds handles on synced folders)
 $stage = Join-Path $env:TEMP "AcadMcpBridge_build_$([guid]::NewGuid().ToString('N'))"
@@ -51,13 +54,14 @@ foreach ($f in Get-ChildItem "$root\installer\PackageContents\*.xml") {
 # Default manifest = all supported versions; INSTALL.BAT rebuilds it for the chosen ones.
 $manifest = (Get-Content -Raw "$parts\head.xml") + (Get-Content -Raw "$parts\ALL.xml") + (Get-Content -Raw "$parts\tail.xml")
 [IO.File]::WriteAllText("$bundle\PackageContents.xml", $manifest, $utf8)
-Copy-Item "$root\installer\register_claude.py" "$bundle\Installer\"
 
 foreach ($s in $series) {
     New-Item -ItemType Directory -Force "$bundle\Contents\$s" | Out-Null
     Copy-Item "$root\bin\Release\$s\AcadMcpBridge.dll" "$bundle\Contents\$s\"
 }
-Copy-Item "$root\server\acad_mcp_server.py", "$root\server\requirements.txt" "$bundle\Contents\"
+# MCP server: started by the AI client as "dotnet.exe Contents\Server\acad_mcp_server.dll".
+New-Item -ItemType Directory -Force "$bundle\Contents\Server" | Out-Null
+Copy-Item "$serverOut\*" "$bundle\Contents\Server\"
 
 # ---- release folder + archive
 $name = "AutoCAD_MCP_$version"
@@ -89,8 +93,7 @@ Write-Host "  $releaseDir"
 Write-Host "  $releaseZip"
 
 if ($Deploy) {
-    $env:ACADMCP_NO_PYTHON = '1'
-    $env:ACADMCP_NO_CLAUDE = '1'
+    $env:ACADMCP_NO_CLIENTS = '1'
     & cmd.exe /c "`"$releaseDir\INSTALL.BAT`" A EN"
     if ($LASTEXITCODE -ne 0) { throw "INSTALL.BAT failed with code $LASTEXITCODE" }
 }
