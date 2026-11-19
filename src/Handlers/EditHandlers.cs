@@ -35,14 +35,19 @@ internal static class EditHandlers
     private static async Task<JsonObject> RunUndo(Document doc, int changes, int steps)
     {
         UndoTracker.BeginOwnUndo();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            // Known issue (PLAN section 10): after a COM SendCommand in this AutoCAD session the
+            // request may stay queued until another bridge request arrives.
             await AcApp.DocumentManager.ExecuteInCommandContextAsync(
                 async _ => await doc.Editor.CommandAsync("_.UNDO", steps.ToString()), null);
         }
         finally
         {
             UndoTracker.EndOwnUndo(doc, steps);
+            if (sw.ElapsedMilliseconds > 5000)
+                Log.Info($"undo {steps} step(s) took {sw.ElapsedMilliseconds} ms");
         }
         try { doc.Editor.UpdateScreen(); } catch { }
         return new JsonObject { ["undone"] = changes, ["remaining_mcp_changes"] = UndoTracker.Available(doc) };

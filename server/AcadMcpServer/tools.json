@@ -294,6 +294,111 @@
       }
     },
     {
+      "name": "zoom",
+      "description": "Zoom the AutoCAD view: to the drawing extents, to a window, or to chosen objects.\n\nChanges only what the user sees, never the drawing; the undo tool does not count it.\nWorks in the current space: model space, a layout, or the model space of the active viewport.\nObjects in another layout are refused - switch there first with set_current_layout.\nReturns the layout, space and the new visible window (view_center, view_width, view_height).",
+      "inputSchema": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "extents",
+                  "window",
+                  "entities"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "extents = all visible objects of the current space (layers off/frozen skipped); window = the box p1-p2; entities = the objects given by handles or filter. Default: entities if handles/filter are given, window if p1 is given, otherwise extents."
+          },
+          "p1": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode window: one corner [x, y] or [x, y, z] (WCS)."
+          },
+          "p2": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode window: the opposite corner."
+          },
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode entities: handles of the objects to show. Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode entities: find_entities keys (types, layers, blocks, window, text). Without 'space' only objects of the current space are used."
+          },
+          "padding": {
+            "default": 0.05,
+            "description": "Margin around the zoomed area as a share of its size on each side (0-1).",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_current_layout",
+      "description": "Make a layout current in AutoCAD: 'Model' for model space or a paper layout name (see list_layouts).\n\nChanges only what the user sees, not the drawing content; the undo tool skips it (undoing a\nlater change may switch the layout back). Returns the new layout and space,\nthe visible window and previous_layout (to switch back when done, if the user wants).",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Layout name as in list_layouts, or 'Model'. Case-insensitive.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "get_table",
       "description": "Read the contents of an AutoCAD table (ACAD_TABLE).\n\nReturns rows/columns count, range read, cells as a 2D array [row][column] (0-based; row 0 is\nusually the title, row 1 the header; see row_styles: _TITLE/_HEADER/_DATA), row_heights,\ncolumn_widths, merged ranges [top, left, bottom, right] (only the top-left cell of a merged\nrange has the value, the others are null), formulas [{row, column, formula, value}],\nlocked_cells (content locked or read-only, e.g. linked to Excel: they cannot be written),\nblock_cells (block name and attribute values), data_links and, if the user has selected\ncells inside the table, selected_cells. Tables over 5000 cells are returned in parts:\n\"truncated\" is true and \"hint\" says which rows to read next.",
       "inputSchema": {

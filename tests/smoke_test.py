@@ -220,13 +220,17 @@ def test_read(base: str) -> None:
     check("props: unknown handle -> item error not_found", missing.get("code") == "not_found", str(missing))
     check("props: bad handle -> item error bad_request", bad.get("code") == "bad_request", str(bad))
 
-    fixture.clear_selection(doc)
+    # Selection goes through the bridge, not COM SendCommand: after a COM SendCommand AutoCAD can
+    # hold back the undo tool's command for good (PLAN section 10).
+    post(base, "set_selection", handles=[])
     _, r = post(base, "get_selection")
     check("get_selection: nothing selected -> 0", r.get("total") == 0, str(r))
-    fixture.select_all(doc)
+    _, every = post(base, "find_entities", space="model", limit=500)
+    post(base, "set_selection", handles=[i["handle"] for i in every.get("items", [])
+                                         if i.get("layer") not in ("MCP_FROZEN", "MCP_LOCKED")])
     _, r = post(base, "get_selection")
     check("get_selection after select all -> >= 5", r.get("total", 0) >= 5, str(r)[:300])
-    fixture.clear_selection(doc)
+    post(base, "set_selection", handles=[])
 
 
 def test_tables(base: str) -> None:
@@ -295,7 +299,7 @@ async def test_mcp(port: int) -> None:
             info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
             check("server identifies as autocad", getattr(info, "name", None) == "autocad", str(info))
             tools = {t.name for t in (await session.list_tools()).tools}
-            check("34 tools listed", len(tools) == 34 and {"health_check", "get_table", "set_table_cells"} <= tools, str(len(tools)))
+            check("36 tools listed", len(tools) == 36 and {"health_check", "get_table", "set_table_cells"} <= tools, str(len(tools)))
             for name in sorted(tools & READ_ONLY_TOOLS):
                 res = await session.call_tool(name, {})
                 check(f"call {name}", not getattr(res, "is_error", False) and not getattr(res, "isError", False),
@@ -329,6 +333,8 @@ def main() -> int:
         test_draw.run(base, post, count, check)
         import test_tablewrite
         test_tablewrite.run(base, post, count, check)
+        import test_view
+        test_view.run(base, post, count, check)
     asyncio.run(test_mcp(args.port))
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1

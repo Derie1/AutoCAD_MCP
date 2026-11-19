@@ -129,14 +129,3 @@ def build_step3(doc) -> dict[str, Any]:
     small = retry(lambda: ms.AddTable(pt(200, -50), 2, 2, 8, 30))
     retry(lambda: small.SetText(1, 0, "x"))
     return {"table_handle": retry(lambda: tb.Handle), "small_table_handle": retry(lambda: small.Handle)}
-
-
-def select_all(doc) -> None:
-    """Select everything with grips (the PickFirst set), as a user would."""
-    retry(lambda: doc.SendCommand("_.AI_SELALL "))
-    time.sleep(1.0)
-
-
-def clear_selection(doc) -> None:
-    retry(lambda: doc.SendCommand("_.AI_DESELECT "))
-    time.sleep(0.5)

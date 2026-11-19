@@ -2,7 +2,7 @@ using AcadMcpBridge.Handlers;
 
 namespace AcadMcpBridge;
 
-/// <summary>All HTTP routes. A new tool = a handler here + its description in acad_mcp_server.py.</summary>
+/// <summary>All HTTP routes. A new tool = a handler here + its schema in server/AcadMcpServer/tools.json.</summary>
 internal static class Routes
 {
     public static IReadOnlyDictionary<string, Route> All()
@@ -23,6 +23,10 @@ internal static class Routes
             Route.Main("list_layouts", CatalogHandlers.ListLayouts),
             Route.Main("list_xrefs", CatalogHandlers.ListXrefs),
             Route.Main("list_styles", CatalogHandlers.ListStyles),
+
+            // view
+            Route.Main("zoom", ViewHandlers.Zoom),
+            Route.Main("set_current_layout", ViewHandlers.SetCurrentLayout),
 
             // tables and attributes
             Route.Main("get_table", TableHandlers.GetTable),
