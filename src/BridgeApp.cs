@@ -14,7 +14,7 @@ namespace AcadMcpBridge;
 /// </summary>
 public sealed class BridgeApp : IExtensionApplication
 {
-    public const string PluginVersion = "0.4.1";
+    public const string PluginVersion = "0.4.2";
 
     internal static BridgeServer? Server { get; private set; }
 

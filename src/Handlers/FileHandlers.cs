@@ -91,6 +91,81 @@ internal static class FileHandlers
         };
     }
 
+    /// <summary>Saves the active drawing to its own file (COM Save: resets DBMOD like QSAVE).</summary>
+    public static JsonObject SaveDocument(JsonObject a)
+    {
+        Ready();
+        var doc = JsonUtil.ActiveDocument();
+        if (!doc.IsNamedDrawing)
+            throw new BridgeException("bad_request", $"'{Name(doc)}' has never been saved; use save_as with a full path");
+        if (doc.IsReadOnly)
+            throw new BridgeException("read_only", $"'{Name(doc)}' is open read-only; use save_as to save a copy elsewhere", 409);
+        string path = doc.Name;
+        Com(doc, path, d => d.Save());
+        var o = Describe(doc);
+        o["saved_to"] = path;
+        return o;
+    }
+
+    /// <summary>
+    /// Saves the active drawing under a new name and format; the drawing then continues under that name
+    /// (like SAVEAS). An existing file is replaced only with overwrite: true.
+    /// </summary>
+    public static JsonObject SaveAs(JsonObject a)
+    {
+        Ready();
+        var doc = JsonUtil.ActiveDocument();
+        string path = FullPath(a, "path", [".dwg", ".dxf"]);
+        bool dxf = path.EndsWith(".dxf", StringComparison.OrdinalIgnoreCase);
+        string format = (Args.Str(a, "format") ?? "2018").Trim();
+        int type = format switch
+        {
+            "2018" => 64, "2013" => 60, "2010" => 48, "2007" => 36, "2004" => 24, "2000" => 12,
+            _ => throw new BridgeException("bad_request", "'format' must be one of 2018, 2013, 2010, 2007, 2004, 2000"),
+        } + (dxf ? 1 : 0); // AcSaveAsType: acYYYY_dxf = acYYYY_dwg + 1
+
+        string? dir = Path.GetDirectoryName(path);
+        if (dir == null || !Directory.Exists(dir))
+            throw new BridgeException("not_found", $"folder '{dir}' does not exist", 404);
+        bool own = doc.IsNamedDrawing && string.Equals(Path.GetFullPath(doc.Name), path, StringComparison.OrdinalIgnoreCase);
+        if (own && doc.IsReadOnly)
+            throw new BridgeException("read_only", $"'{Name(doc)}' is open read-only; save it under another name", 409);
+        if (!own)
+        {
+            if (Find(path) != null)
+                throw new BridgeException("file_in_use", $"'{path}' is open in AutoCAD; close it first", 409);
+            if (File.Exists(path) && !Args.Bool(a, "overwrite"))
+                throw new BridgeException("file_exists", $"'{path}' already exists; pass overwrite: true to replace it (ask the user first)", 409);
+            if (File.Exists(path) && InUse(path))
+                throw new BridgeException("file_in_use",
+                    $"'{path}' is in use by another program or user, or by AutoCAD itself (it keeps the previous file of a drawing saved under a new name open)", 409);
+        }
+
+        string? previous = doc.IsNamedDrawing ? doc.Name : null;
+        Com(doc, path, d => d.SaveAs(path, type));
+        var o = Describe(doc);
+        o["saved_to"] = path;
+        o["format"] = (dxf ? "DXF " : "DWG ") + format;
+        o["previous_path"] = previous;
+        return o;
+    }
+
+    /// <summary>Runs a COM save on the document; COM failures become a readable error.</summary>
+    private static void Com(Document doc, string path, Action<dynamic> save)
+    {
+        try { save(doc.GetAcadDocument()); }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            throw new BridgeException("save_failed", $"AutoCAD could not save '{path}': {ex.Message}", 500);
+        }
+        finally
+        {
+            // A COM save leaves its own (empty) UNDO group without any command event; without this
+            // the undo tool would spend one step on it and the last change would stay.
+            UndoTracker.Recorded(doc, false);
+        }
+    }
+
     // ---- helpers ----
 
     /// <summary>Refuses while the active drawing runs a command or a dialog is open.</summary>

@@ -317,6 +317,48 @@
       }
     },
     {
+      "name": "save_document",
+      "description": "Save the active drawing to its own file (like QSAVE). A never-saved drawing needs save_as;\na read-only drawing cannot be saved (save_as a copy instead). Not an undo step.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "save_as",
+      "description": "Save the active drawing under a new full path (.dwg or .dxf) and format; the drawing then continues\nunder the new name, like SAVEAS (previous_path tells the old one).\n\nAn existing file is replaced only with overwrite: true (ask the user first); a file open in AutoCAD\nor in use elsewhere is refused. The folder must exist. Not an undo step.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "description": "Full path ending with .dwg or .dxf, e.g. C:\\Projects\\plan_v2.dwg.",
+            "type": "string"
+          },
+          "format": {
+            "default": "2018",
+            "enum": [
+              "2018",
+              "2013",
+              "2010",
+              "2007",
+              "2004",
+              "2000"
+            ],
+            "description": "DWG/DXF version: 2018 (current, read by AutoCAD 2018-2027) or an older one for older programs.",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "description": "Replace an existing file.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "list_layers",
       "description": "Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,\nplottable, current, from_xref, description and the number of entities on each.",
       "inputSchema": {
