@@ -31,6 +31,7 @@ internal static class Routes
             Route.Main("manage_xrefs", XrefHandlers.ManageXrefs),
             Route.Main("purge", MaintenanceHandlers.Purge),
             Route.Main("audit", MaintenanceHandlers.Audit),
+            Route.Main("import_from_drawing", ImportHandlers.ImportFromDrawing),
 
             Route.Main("list_layers", CatalogHandlers.ListLayers),
             Route.Main("list_blocks", CatalogHandlers.ListBlocks),

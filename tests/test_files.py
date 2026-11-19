@@ -104,6 +104,7 @@ def _run(base: str, post: Callable, count: Callable, check: Callable, tmp: str) 
     _plot(base, post, count, check, tmp)
     _xrefs(base, post, count, check, tmp)
     _maintenance(base, post, count, check, tmp)
+    _import(base, post, count, check, tmp)
 
     s, r = post(base, "set_active_document", name=home_name)
     check("back to the test drawing", s == 200 and r.get("name") == home_name, str(r)[:200])
@@ -376,4 +377,52 @@ def _maintenance(base: str, post: Callable, count: Callable, check: Callable, tm
     post(base, "new_document")
     s, r = post(base, "audit")
     check("audit of an unsaved drawing runs without a report", s == 200 and r.get("report") is None and r.get("note"), str(r)[:300])
+    post(base, "close_document", discard_changes=True)
+
+
+def _import(base: str, post: Callable, count: Callable, check: Callable, tmp: str) -> None:
+    """Step 6: import_from_drawing. Uses x/Part.dwg from the xref checks."""
+    def layer(name: str):
+        _, r = post(base, "list_layers", with_counts=False)
+        return next(((x["color"], x["linetype"]) for x in r.get("layers", []) if x["name"] == name), None)
+
+    std = os.path.join(tmp, "Std.dwg")
+    post(base, "new_document", template="acadiso")
+    post(base, "create_layer", name="E-POWER", color=1, linetype="DASHED")
+    post(base, "create_layer", name="E-LIGHT", color=2)
+    post(base, "set_text_style", name="ST_ISO", font="isocpeur")
+    post(base, "set_dim_style", name="D50", text_style="ST_ISO")
+    _, ref = post(base, "attach_xref", path=os.path.join(tmp, "x", "Part.dwg"))
+    post(base, "manage_xrefs", action="insert", names="Part")
+    post(base, "save_as", path=std)
+    post(base, "close_document")
+
+    post(base, "new_document", template="acadiso")
+    post(base, "create_layer", name="E-POWER", color=5)
+    s, r = post(base, "import_from_drawing", path=std, kinds=["layers"], names="E-*")
+    check("import_from_drawing layers, existing skipped", s == 200 and r.get("imported", {}).get("layers") == ["E-LIGHT"]
+          and r.get("skipped_existing", {}).get("layers") == ["E-POWER"] and layer("E-POWER") == (5, "Continuous")
+          and layer("E-LIGHT") == (2, "Continuous"), str(r)[:400])
+    s, r = post(base, "import_from_drawing", path=std, kinds=["layers"], names="E-POWER", on_conflict="replace")
+    check("import_from_drawing replace brings the linetype along", s == 200 and r.get("replaced", {}).get("layers") == ["E-POWER"]
+          and "DASHED" in r.get("also_added", {}).get("linetypes", []) and layer("E-POWER") == (1, "DASHED"), str(r)[:400])
+    s, u = post(base, "undo")
+    check("undo reverts the import", s == 200 and layer("E-POWER") == (5, "Continuous"), str(layer("E-POWER")))
+
+    s, r = post(base, "import_from_drawing", path=std, kinds=["dim_styles", "blocks"])
+    check("import_from_drawing dimension style and block", s == 200 and r.get("imported", {}).get("dim_styles") == ["D50"]
+          and r.get("imported", {}).get("blocks") == ["Part"] and "ST_ISO" in r.get("also_added", {}).get("text_styles", [])
+          and "PART" in r.get("also_added", {}).get("layers", []), str(r)[:400])
+    s, ins = post(base, "insert_block", name="Part", position=[0, 0])
+    check("an imported block can be inserted", s == 200, str(ins)[:200])
+
+    for name, args, code in [
+        ("nothing matches", {"path": std, "kinds": ["layers"], "names": "NOPE*"}, 404),
+        ("unknown kind", {"path": std, "kinds": ["bogus"]}, 400),
+        ("without kinds", {"path": std}, 400),
+        ("missing file", {"path": os.path.join(tmp, "none.dwg"), "kinds": ["layers"]}, 404),
+        ("bad on_conflict", {"path": std, "kinds": ["layers"], "on_conflict": "merge"}, 400),
+    ]:
+        s, r = post(base, "import_from_drawing", **args)
+        check(f"import_from_drawing {name} -> {code}", s == code, str(r)[:200])
     post(base, "close_document", discard_changes=True)

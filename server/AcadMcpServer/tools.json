@@ -701,6 +701,60 @@
       }
     },
     {
+      "name": "import_from_drawing",
+      "description": "Copy definitions from another DWG or a template (DWT) into the active drawing: layers, linetypes,\ntext / dimension / table / multileader styles, block definitions. Use it to bring a layer standard\nor company styles from a template. The source file is only read (it may be open in AutoCAD).\n\non_conflict: skip (default) keeps definitions that already exist here; replace overwrites them with\nthe source's (ask the user first; replacing a block redefines all its insertions). What the imported\nobjects need comes along (a layer's linetype, a style's text style) and is listed in also_added.\nOne undo step.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "description": "Full path of the source .dwg or .dwt.",
+            "type": "string"
+          },
+          "kinds": {
+            "items": {
+              "enum": [
+                "layers",
+                "linetypes",
+                "text_styles",
+                "dim_styles",
+                "table_styles",
+                "mleader_styles",
+                "blocks"
+              ],
+              "type": "string"
+            },
+            "type": "array",
+            "description": "What to copy."
+          },
+          "names": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name mask with * and ?, e.g. 'E-*'. Default: all."
+          },
+          "on_conflict": {
+            "default": "skip",
+            "enum": [
+              "skip",
+              "replace"
+            ],
+            "type": "string",
+            "description": "When a definition with the same name exists here."
+          }
+        },
+        "required": [
+          "path",
+          "kinds"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "list_layers",
       "description": "Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,\nplottable, current, from_xref, description and the number of entities on each.",
       "inputSchema": {
