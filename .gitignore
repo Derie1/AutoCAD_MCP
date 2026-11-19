@@ -6,3 +6,6 @@ release/
 .vs/
 *.user
 __pycache__/
+
+# AutoCAD crash reports written into the working folder
+ErrorReports/

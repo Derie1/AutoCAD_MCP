@@ -14,8 +14,20 @@
 Плагин работает внутри AutoCAD и включается только по вашей команде; связь идёт лишь внутри
 компьютера (localhost).
 
-**Новое в 0.3.0:** Python больше не нужен — сервер для ИИ-ассистента теперь на .NET и ставится вместе
-с плагином. Установщик подключает не только Claude Desktop, но и Claude Code и Codex.
+**Новое в 0.4.0:**
+- **Ассистент видит чертёж:** снимок текущего вида, всего чертежа, листа, рамки или выбранных объектов —
+  ассистент может сам проверить, что нарисовал. Ваш вид на экране при этом не меняется.
+- Показать всё / рамку / объекты, перейти на лист или в модель.
+- **Размеры:** высота текста, стрелки, точность, масштаб, размещение и положение текста — при создании
+  и для готовых размеров.
+- **Мультивыноски** с текстом, в том числе несколько стрелок к одной надписи.
+- **Стили:** создание и изменение стилей текста (TrueType и SHX), размеров, таблиц и мультивыносок;
+  смена стиля у готовых объектов.
+- Свойства динамических блоков: значения, которых нет в списке блока, отклоняются, а не подменяются молча.
+- Новые объекты по умолчанию «ПоСлою» (цвет, тип и вес линий); новый слой — тип линий Continuous.
+
+*В 0.3.0:* Python больше не нужен — сервер на .NET ставится вместе с плагином; установщик подключает
+Claude Desktop, Claude Code и Codex.
 
 ## Возможности
 
@@ -30,11 +42,15 @@
 блоков таблицей и массовое заполнение атрибутов.
 
 **Черчение**
-Отрезки, полилинии, окружности, дуги, тексты, размеры, вставка блоков с атрибутами, создание слоёв.
+Отрезки, полилинии, окружности, дуги, тексты, размеры, мультивыноски, вставка блоков с атрибутами,
+создание слоёв и стилей оформления.
+
+**Просмотр**
+Снимок вида в картинку (ассистент видит чертёж), показать всё / рамку / объекты, переход между листами.
 
 **Редактирование**
-Свойства объектов (слой, цвет, тип и вес линий, прозрачность), перемещение, копирование, поворот,
-масштаб, зеркало, удаление, управление слоями.
+Свойства объектов (слой, цвет, тип и вес линий, прозрачность, стиль, свойства динамических блоков),
+настройка размеров, перемещение, копирование, поворот, масштаб, зеркало, удаление, управление слоями.
 
 **Безопасность**
 Каждое изменение ассистента отменяется одним шагом, и отменяются только его изменения, а не ваши.
@@ -100,8 +116,20 @@ and the assistant reads the drawing and makes the changes through the plugin's t
 The plugin runs inside AutoCAD and starts only on your command; it talks only within this
 computer (localhost).
 
-**New in 0.3.0:** Python is no longer needed — the server for the AI assistant is now .NET and is
-installed with the plugin. The installer connects Claude Code and Codex as well as Claude Desktop.
+**New in 0.4.0:**
+- **The assistant sees the drawing:** a picture of the current view, the whole drawing, a layout, a window
+  or chosen objects — the assistant can check what it has drawn. Your view on screen does not change.
+- Zoom to extents / window / objects, switch to a layout or the model.
+- **Dimensions:** text height, arrows, precision, scale, text fit and position — when creating and for
+  existing dimensions.
+- **Multileaders** with text, including several arrows to one label.
+- **Styles:** create and change text (TrueType and SHX), dimension, table and multileader styles; change
+  the style of existing objects.
+- Dynamic block properties: values not in the block's list are rejected instead of being silently replaced.
+- New objects default to ByLayer (color, linetype, lineweight); a new layer gets the Continuous linetype.
+
+*In 0.3.0:* Python is no longer needed — the .NET server is installed with the plugin; the installer
+connects Claude Desktop, Claude Code and Codex.
 
 ## Features
 
@@ -116,11 +144,15 @@ selected ones, inserting and deleting rows and columns, creating tables from dat
 attributes exported as a table and filled in bulk.
 
 **Drafting**
-Lines, polylines, circles, arcs, texts, dimensions, block insertion with attributes, new layers.
+Lines, polylines, circles, arcs, texts, dimensions, multileaders, block insertion with attributes,
+new layers and styles.
+
+**Viewing**
+A picture of the view (the assistant sees the drawing), zoom to extents / window / objects, switching layouts.
 
 **Editing**
-Object properties (layer, color, linetype, lineweight, transparency), move, copy, rotate, scale,
-mirror, delete, layer management.
+Object properties (layer, color, linetype, lineweight, transparency, style, dynamic block properties),
+dimension settings, move, copy, rotate, scale, mirror, delete, layer management.
 
 **Safety**
 Every change the assistant makes is undone in one step, and only its own changes are undone, never
