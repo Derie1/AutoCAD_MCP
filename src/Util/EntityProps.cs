@@ -94,9 +94,7 @@ internal static class EntityProps
                 if (br.IsDynamicBlock) o["dynamic_properties"] = DynamicProps(br);
                 break;
             case Dimension d:
-                o["measurement"] = R(d.Measurement);
-                o["text_override"] = string.IsNullOrEmpty(d.DimensionText) ? null : d.DimensionText;
-                o["dim_style"] = d.DimensionStyleName;
+                AcadMcpBridge.Handlers.DimensionHandlers.Fill(o, d, tr);
                 break;
             case Hatch h:
                 o["pattern"] = h.PatternName;

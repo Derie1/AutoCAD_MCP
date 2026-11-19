@@ -177,14 +177,8 @@ internal static class DrawHandlers
         var loc = Args.Point(a, "dim_line_point", required: true)!.Value;
         if (p1.IsEqualTo(p2)) throw new BridgeException("bad_request", "'p1' and 'p2' must differ");
         string text = Args.Str(a, "text_override") ?? "";
-
-        ObjectId style = ctx.Db.Dimstyle;
-        if (Args.Str(a, "style") is string sn)
-        {
-            var dt = (DimStyleTable)ctx.Tr.GetObject(ctx.Db.DimStyleTableId, OpenMode.ForRead);
-            if (!dt.Has(sn)) throw new BridgeException("not_found", $"dimension style '{sn}' does not exist (see list_styles)", 404);
-            style = dt[sn];
-        }
+        string? styleName = Args.Str(a, "style");
+        ObjectId style = styleName != null ? DimensionHandlers.Style(ctx, styleName) : ctx.Db.Dimstyle;
 
         Dimension dim = kind switch
         {
@@ -194,8 +188,16 @@ internal static class DrawHandlers
         };
         dim.SetDatabaseDefaults(ctx.Db);
         dim.DimensionStyle = style;
+        if (styleName == null)
+        {
+            // The current style together with the current DIM* overrides (DIMTXT, DIMASZ, DIMBLK…),
+            // as the DIMLINEAR command would use them.
+            using var current = ctx.Db.GetDimstyleData();
+            dim.SetDimstyleData(current);
+        }
         Common(ctx, dim, a);
         ctx.Add(ctx.CurrentSpace(), dim);
+        DimensionHandlers.Apply(ctx, dim, a);
         dim.RecomputeDimensionBlock(true);
         return EntityProps.Full(dim, ctx.Tr, withXdata: false);
     });

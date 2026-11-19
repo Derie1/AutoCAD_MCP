@@ -596,6 +596,16 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
   динамическом блоке: тест копирует «Door - Metric» из примера AutoCAD (`Sample\en-us\Dynamic Blocks\
   Architectural - Metric.dwg`) через ObjectDBX `CopyObjects` (без `SendCommand`). smoke-тест 235/235 в 2026 и 2027.
 
+- 2026-11-19 — **0.3.5 (итерация 2, шаг 5): размеры.** `create_dimension` без `style` берёт текущий стиль вместе
+  с текущими переопределениями DIM* (`SetDimstyleData(db.GetDimstyleData())`), как РЗМЛИНЕЙНЫЙ. Новые параметры
+  (переопределения у объекта): `text_height`, `arrow_size`, `arrow` (стрелки AutoCAD `_ARCHTICK`… или блок;
+  блок стрелки создаётся через DIMBLK с возвратом прежнего значения), `text_style`, `decimals`, `dim_scale`,
+  `fit` (best / arrows / text / both_outside / text_inside = DIMATFIT + DIMTIX), `text_position` (+`text_leader`,
+  DIMTMOVE 2/1). Новый инструмент **`modify_dimension`** — те же параметры, `text_override`, смена `style`,
+  `reset_overrides`, по handle или фильтру; `get_entity_properties` показывает действующие значения размера.
+  Свойство текстового стиля у `Dimension` — `TextStyleId` (не `Dimtxsty`). Попутно исправлены описания `color`
+  у `create_*` (после шага 3 оставалось «текущий цвет»). 38 инструментов, smoke-тест 252/252 в 2026 и 2027.
+
 ## 9. Возможные усовершенствования
 - **Псевдотаблицы из линий и текстов** — распознавать сетку из отрезков/полилиний и тексты в ячейках,
   читать как обычную таблицу; запись — заменой текстов. Частый случай в старых чертежах и схемах щитов.
@@ -689,7 +699,7 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
        дополнительно сбрасывать переопределения стиля/высоты текста в ячейках.
     7. Параметр `text_style`/`text_height` в `create_table` (сейчас только `style` таблицы).
 
-- [ ] **`create_dimension` не учитывает текущие переопределения размерного стиля** (найдено 2026-11-18, плагин 0.3.0,
+- [x] *(исправлено в 0.3.5, 2026-11-19; `text_height` таблиц — шаг 6)* **`create_dimension` не учитывает текущие переопределения размерного стиля** (найдено 2026-11-18, плагин 0.3.0,
   AutoCAD 2027; тот же план квартиры).
   - *Воспроизведение:* `set_system_variable` DIMTXT=250, DIMASZ=150, DIMBLK=_ARCHTICK, DIMDEC=0, DIMTAD=1 →
     `create_dimension(...)`. Размер создаётся со стилем Standard и его исходными значениями (текст и засечки 0.18),

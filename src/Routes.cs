@@ -44,6 +44,7 @@ internal static class Routes
             Route.Main("create_text", DrawHandlers.CreateText),
             Route.Main("create_mtext", DrawHandlers.CreateMText),
             Route.Main("create_dimension", DrawHandlers.CreateDimension),
+            Route.Main("modify_dimension", DimensionHandlers.ModifyDimension),
             Route.Main("insert_block", BlockHandlers.InsertBlock),
             Route.Main("update_block_attributes", BlockHandlers.UpdateBlockAttributes),
 

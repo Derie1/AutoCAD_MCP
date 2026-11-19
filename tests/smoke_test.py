@@ -299,7 +299,7 @@ async def test_mcp(port: int) -> None:
             info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
             check("server identifies as autocad", getattr(info, "name", None) == "autocad", str(info))
             tools = {t.name for t in (await session.list_tools()).tools}
-            check("37 tools listed", len(tools) == 37 and {"health_check", "get_table", "capture_view"} <= tools, str(len(tools)))
+            check("38 tools listed", len(tools) == 38 and {"health_check", "get_table", "capture_view"} <= tools, str(len(tools)))
             for name in sorted(tools & READ_ONLY_TOOLS):
                 res = await session.call_tool(name, {})
                 check(f"call {name}", not getattr(res, "is_error", False) and not getattr(res, "isError", False),
@@ -343,6 +343,8 @@ def main() -> int:
         test_fixes.run(base, post, count, check)
         import test_dynamic
         test_dynamic.run(base, post, count, check)
+        import test_dims
+        test_dims.run(base, post, count, check)
         import test_view
         test_view.run(base, post, count, check)
     asyncio.run(test_mcp(args.port))

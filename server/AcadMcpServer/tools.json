@@ -1040,7 +1040,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1161,7 +1161,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1240,7 +1240,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1375,7 +1375,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1491,7 +1491,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1618,7 +1618,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1657,7 +1657,7 @@
     },
     {
       "name": "create_dimension",
-      "description": "Create a linear or aligned dimension. Returns it with the measurement. One undo step.",
+      "description": "Create a linear or aligned dimension. Returns it with the measurement and its effective appearance\n(text_height, arrow_size, dim_scale, …). One undo step.\n\nWithout 'style' it uses the current dimension style WITH the current DIM* system variable overrides\n(DIMTXT, DIMASZ, DIMBLK, …), like the DIMLINEAR command. text_height, arrow_size, arrow, text_style,\ndecimals, dim_scale, fit and text_position override the style for this dimension only. For many\ndimensions of one look, prefer a dimension style (or dim_scale) over per-object overrides.",
       "inputSchema": {
         "properties": {
           "p1": {
@@ -1715,6 +1715,117 @@
             "default": null,
             "description": "Dimension style name. Default: the current style."
           },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height (DIMTXT) for this dimension, in drawing units before dim_scale."
+          },
+          "arrow_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Arrow / tick size (DIMASZ), before dim_scale."
+          },
+          "arrow": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Arrowhead: closed_filled (default), _ARCHTICK, _OBLIQUE, _DOT, _DOTSMALL, _OPEN, _OPEN30, _OPEN90, _CLOSED, _CLOSEDBLANK, _NONE, _INTEGRAL, or a block name."
+          },
+          "text_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style name (see list_styles)."
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Decimal places of the measurement (DIMDEC), 0-8."
+          },
+          "dim_scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Overall scale (DIMSCALE): multiplies text height, arrow size, gaps and extensions."
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "best",
+                  "arrows",
+                  "text",
+                  "both_outside",
+                  "text_inside"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where text and arrows go when they do not fit between the extension lines: best (AutoCAD default), arrows (arrows outside first), text (text outside first), both_outside, text_inside (always keep text inside)."
+          },
+          "text_position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Put the text at this point [x, y] (WCS); the dimension line stays."
+          },
+          "text_leader": {
+            "default": false,
+            "description": "With text_position: draw a leader from the moved text to the dimension line.",
+            "type": "boolean"
+          },
           "layer": {
             "anyOf": [
               {
@@ -1740,7 +1851,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
@@ -1775,6 +1886,193 @@
           "p2",
           "dim_line_point"
         ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "modify_dimension",
+      "description": "Change existing dimensions without re-creating them: text, text position, text height, arrows, text style,\ndecimals, overall scale, fit, or the dimension style. Returns the new effective appearance of each.\n\nObjects are chosen by handles or by filter (types: DIMENSION…); all must be dimensions, otherwise\nnothing changes. text_position works on one dimension per call. 'style' switches the style and drops\nearlier overrides; reset_overrides drops them while keeping the style. One call = one undo step.",
+      "inputSchema": {
+        "properties": {
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Entity handles to act on (from find_entities / get_selection). Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Select the objects by a filter instead of handles: the find_entities keys (types, layers, blocks, window, space, text). A filter needs confirm: true; run with dry_run: true first to see what it hits."
+          },
+          "text_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New text; \"<>\" stands for the measurement, \"\" restores the measured text."
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Switch to this dimension style (earlier overrides are dropped first)."
+          },
+          "reset_overrides": {
+            "default": false,
+            "description": "Drop the object's overrides: take all values from its style again (applied before the other changes).",
+            "type": "boolean"
+          },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height (DIMTXT) for this dimension, in drawing units before dim_scale."
+          },
+          "arrow_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Arrow / tick size (DIMASZ), before dim_scale."
+          },
+          "arrow": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Arrowhead: closed_filled (default), _ARCHTICK, _OBLIQUE, _DOT, _DOTSMALL, _OPEN, _OPEN30, _OPEN90, _CLOSED, _CLOSEDBLANK, _NONE, _INTEGRAL, or a block name."
+          },
+          "text_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style name (see list_styles)."
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Decimal places of the measurement (DIMDEC), 0-8."
+          },
+          "dim_scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Overall scale (DIMSCALE): multiplies text height, arrow size, gaps and extensions."
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "best",
+                  "arrows",
+                  "text",
+                  "both_outside",
+                  "text_inside"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where text and arrows go when they do not fit between the extension lines: best (AutoCAD default), arrows (arrows outside first), text (text outside first), both_outside, text_inside (always keep text inside)."
+          },
+          "text_position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Put the text at this point [x, y] (WCS); the dimension line stays."
+          },
+          "text_leader": {
+            "default": false,
+            "description": "With text_position: draw a leader from the moved text to the dimension line.",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Change nothing; report how many and which objects would be affected.",
+            "type": "boolean"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required when objects are chosen by filter. Ask the user before bulk changes.",
+            "type": "boolean"
+          }
+        },
         "type": "object"
       }
     },
@@ -1868,7 +2166,7 @@
               }
             ],
             "default": null,
-            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
           },
           "linetype": {
             "anyOf": [
