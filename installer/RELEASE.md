@@ -14,7 +14,17 @@
 Плагин работает внутри AutoCAD и включается только по вашей команде; связь идёт лишь внутри
 компьютера (localhost).
 
-**Новое в 0.4.0:**
+**Новое в 0.5.0:**
+- **Файлы:** создать чертёж по шаблону, открыть (в том числе только для чтения), переключиться между
+  открытыми, сохранить, сохранить как DWG/DXF нужной версии (2018…2000), закрыть.
+- **Печать в PDF:** выбранные или все листы в один многостраничный PDF или по файлу на лист; модель — весь
+  чертёж или рамка. Листы печатаются со своими настройками.
+- **Внешние ссылки:** подключить (вставка или наложение), обновить, выгрузить, удалить, внедрить, сменить путь.
+- **Очистка и проверка:** удаление неиспользуемых слоёв, стилей, блоков (сначала показывается список) и аудит.
+- **Стандарты из шаблона:** перенос слоёв, типов линий, стилей и блоков из другого чертежа или шаблона.
+- Ничего не теряется молча: несохранённые изменения, существующие файлы и PDF — только по явному указанию.
+
+*В 0.4.0:*
 - **Ассистент видит чертёж:** снимок текущего вида, всего чертежа, листа, рамки или выбранных объектов —
   ассистент может сам проверить, что нарисовал. Ваш вид на экране при этом не меняется.
 - Показать всё / рамку / объекты, перейти на лист или в модель.
@@ -44,6 +54,10 @@ Claude Desktop, Claude Code и Codex.
 **Черчение**
 Отрезки, полилинии, окружности, дуги, тексты, размеры, мультивыноски, вставка блоков с атрибутами,
 создание слоёв и стилей оформления.
+
+**Файлы и печать**
+Создание, открытие, сохранение (в том числе в старые версии DWG и DXF) и закрытие чертежей, печать листов
+в PDF, внешние ссылки, очистка, аудит, перенос стандартов из шаблона.
 
 **Просмотр**
 Снимок вида в картинку (ассистент видит чертёж), показать всё / рамку / объекты, переход между листами.
@@ -116,7 +130,17 @@ and the assistant reads the drawing and makes the changes through the plugin's t
 The plugin runs inside AutoCAD and starts only on your command; it talks only within this
 computer (localhost).
 
-**New in 0.4.0:**
+**New in 0.5.0:**
+- **Files:** create a drawing from a template, open (read-only too), switch between open drawings, save,
+  save as DWG/DXF of a chosen version (2018…2000), close.
+- **PDF printing:** chosen or all layouts into one multi-page PDF or one file per layout; model — the whole
+  drawing or a window. Layouts print with their own page setup.
+- **External references:** attach (or overlay), reload, unload, detach, bind, change the path.
+- **Cleanup and check:** purge of unused layers, styles, blocks (the list is shown first) and audit.
+- **Standards from a template:** copy layers, linetypes, styles and blocks from another drawing or template.
+- Nothing is lost silently: unsaved changes, existing files and PDFs only on explicit request.
+
+*In 0.4.0:*
 - **The assistant sees the drawing:** a picture of the current view, the whole drawing, a layout, a window
   or chosen objects — the assistant can check what it has drawn. Your view on screen does not change.
 - Zoom to extents / window / objects, switch to a layout or the model.
@@ -146,6 +170,10 @@ attributes exported as a table and filled in bulk.
 **Drafting**
 Lines, polylines, circles, arcs, texts, dimensions, multileaders, block insertion with attributes,
 new layers and styles.
+
+**Files and printing**
+Creating, opening, saving (older DWG versions and DXF too) and closing drawings, printing layouts to PDF,
+external references, purge, audit, standards from a template.
 
 **Viewing**
 A picture of the view (the assistant sees the drawing), zoom to extents / window / objects, switching layouts.

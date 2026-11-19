@@ -252,11 +252,11 @@ AutoCAD_MCP\
 - [x] `undo` — откатить последние вызовы MCP — 0.1.2
 
 ### Этап 4 — файлы, листы, печать
-- [ ] `open_document`, `new_document` (по шаблону DWT), `save_document`, `save_as` (с версией формата DWG), `close_document`
-- [ ] `plot_to_pdf` — лист(ы) в PDF (`PlotEngine` или `-PLOT`/`PUBLISH` через command context); пакетно все листы
-- [ ] `attach_xref`, `reload_xrefs`, `bind_xrefs`
-- [ ] `purge`, `audit`
-- [ ] `import_layers_from` — стандарт слоёв из шаблона
+- [x] `open_document`, `new_document` (по шаблону DWT), `set_active_document`, `close_document` — 0.4.1; `save_document`, `save_as` (DWG/DXF 2018…2000) — 0.4.2
+- [x] `plot_to_pdf` — лист(ы) в PDF (`PlotEngine`), один многостраничный или по файлу на лист — 0.4.3
+- [x] `attach_xref`, `manage_xrefs` (reload / unload / detach / bind / insert / repath) — 0.4.4
+- [x] `purge`, `audit` — 0.4.5
+- [x] `import_from_drawing` — слои, типы линий, стили, блоки из DWG/DWT (вместо `import_layers_from`) — 0.4.6
 
 ### Этап 5 — «аварийные люки» (выключены по умолчанию)
 - [ ] `run_command` — строка команды AutoCAD через `ExecuteInCommandContextAsync` (`Editor.Command`)
@@ -367,7 +367,7 @@ AutoCAD_MCP\
 | 7 | 0.3.7 | `create_mleader(points, text, style, layer)` |
 | 8 | 0.4.0 | Тесты, README, RELEASE.md, отметки в разделе 10, коммит и push |
 
-## 4в. Итерация 3 — этап 4: файлы, листы, печать (план от 2026-11-19)
+## 4в. Итерация 3 — этап 4: файлы, листы, печать (план от 2026-11-19) — выполнена, 0.5.0
 
 Цель: ассистент открывает, создаёт, сохраняет и закрывает чертежи, печатает листы в PDF, работает с внешними
 ссылками, чистит чертёж и переносит определения из шаблонов. Порядок работы прежний: шаг = версия +0.0.1, тест
@@ -726,6 +726,14 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
   `also_added` (сравнение имён до и после). Не переносятся слой 0, ByLayer/ByBlock/Continuous, анонимные и
   зависимые от ссылок записи. Один шаг UNDO. 55 инструментов, smoke-тест 382/382 в 2026 и 2027 (один прогон
   в 2027 — 381/382, см. раздел 10).
+
+- 2026-11-19 — **0.5.0 (итерация 3, шаг 7): итог.** Этап 4 завершён: 55 инструментов (было 43) — документы
+  (`new/open/set_active/close_document`), сохранение (`save_document`, `save_as`), `plot_to_pdf`, внешние ссылки
+  (`attach_xref`, `manage_xrefs`), `purge`, `audit`, `import_from_drawing`. Общие находки итерации: COM-сохранение,
+  блокировка документа и AUDIT без исправления оставляют пустые группы UNDO без событий команды — трекер их
+  учитывает; у MCP-сервера таймаут по инструменту (печать — 15 мин). README и RELEASE.md (RU/EN, «Новое в 0.5.0»)
+  обновлены; smoke-тест 382/382 в 2026 и 2027. Открыто в разделе 10: создание динблоков (этап 5, 0.6.0),
+  зависание `undo` после COM `SendCommand`, нестабильная проверка `undo` на листе.
 
 ## 9. Возможные усовершенствования
 - **Псевдотаблицы из линий и текстов** — распознавать сетку из отрезков/полилиний и тексты в ячейках,
