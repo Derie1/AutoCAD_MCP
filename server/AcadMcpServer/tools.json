@@ -359,6 +359,133 @@
       }
     },
     {
+      "name": "plot_to_pdf",
+      "description": "Print layouts of the active drawing to PDF (AutoCAD's 'DWG To PDF.pc3').\n\nlayouts: names (see list_layouts), '*' for all paper layouts in tab order; default: the current layout.\nOne multi-page PDF at path (.pdf), or with separate_files: true one PDF per layout in the folder path,\nnamed <drawing>-<layout>.pdf. An existing PDF is replaced only with overwrite: true.\n\nPaper layouts print with their own page setup (paper size, scale, plot style, rotation); only the\nprinter is replaced, with the PDF paper closest to the layout's. Model prints the extents (or a\nwindow p1-p2) fitted to the paper, or at 'scale', on a sheet turned to suit the area. paper overrides\nthe size: 'A3', 'A1' … (ISO full bleed) or a full PDF paper name. Printing a layout that was never\nopened sets it up as clicking its tab would (AutoCAD creates its default viewport). The user's current\nlayout is restored. Can take a while for many sheets. Not an undo step. Returns the files and, per\nsheet, the paper, area and scale used.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "description": "Full path of the PDF (or of the folder, with separate_files).",
+            "type": "string"
+          },
+          "layouts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Layout name(s), 'Model', or '*' for all paper layouts. Default: the current layout."
+          },
+          "separate_files": {
+            "default": false,
+            "description": "One PDF per layout; path is then a folder.",
+            "type": "boolean"
+          },
+          "overwrite": {
+            "default": false,
+            "description": "Replace existing PDF files.",
+            "type": "boolean"
+          },
+          "paper": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Paper size for all sheets: 'A4', 'A3', 'A1' … or a full PDF paper name. Default: the layout's own size."
+          },
+          "plot_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Plot style table, e.g. 'monochrome.ctb'. Default: the layout's own."
+          },
+          "area": {
+            "anyOf": [
+              {
+                "enum": [
+                  "extents",
+                  "window",
+                  "page_setup"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Model only: extents (default), window (p1, p2) or page_setup (Model's saved settings)."
+          },
+          "p1": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Model only: window corner [x, y]."
+          },
+          "p2": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Model only: opposite window corner [x, y]."
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Model only: drawing units per paper millimetre, e.g. 100 for 1:100 in a drawing in mm. Default: fit to paper."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "list_layers",
       "description": "Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,\nplottable, current, from_xref, description and the number of entities on each.",
       "inputSchema": {

@@ -7,11 +7,18 @@ namespace AcadMcpServer;
 /// <summary>
 /// HTTP client of the AcadMcpBridge plugin (http://localhost:PORT/). Environment:
 ///   ACAD_MCP_PORT (8766), ACAD_MCP_TOKEN (sent as X-Bridge-Token), ACAD_MCP_TIMEOUT (seconds, 60).
+/// Long operations (printing) get at least their own timeout from LongRoutes.
 /// </summary>
 internal sealed class Bridge
 {
+    private static readonly Dictionary<string, double> LongRoutes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["plot_to_pdf"] = 900,
+    };
+
     private readonly HttpClient _http;
     private readonly int _port;
+    private readonly double _timeout;
     private volatile bool _verified;
 
     public Bridge()
@@ -19,7 +26,8 @@ internal sealed class Bridge
         _port = int.TryParse(Environment.GetEnvironmentVariable("ACAD_MCP_PORT"), out int p) ? p : 8766;
         double timeout = double.TryParse(Environment.GetEnvironmentVariable("ACAD_MCP_TIMEOUT"),
             System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double t) ? t : 60;
-        _http = new HttpClient { BaseAddress = new Uri($"http://localhost:{_port}/"), Timeout = TimeSpan.FromSeconds(timeout) };
+        _timeout = timeout;
+        _http = new HttpClient { BaseAddress = new Uri($"http://localhost:{_port}/"), Timeout = Timeout.InfiniteTimeSpan };
         var token = Environment.GetEnvironmentVariable("ACAD_MCP_TOKEN");
         if (!string.IsNullOrEmpty(token)) _http.DefaultRequestHeaders.Add("X-Bridge-Token", token);
     }
@@ -57,13 +65,20 @@ internal sealed class Bridge
             req.Content = new StringContent(body.ToJsonString(), Encoding.UTF8);
             req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
         }
+        double seconds = Math.Max(_timeout, LongRoutes.GetValueOrDefault(route));
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(seconds));
         HttpResponseMessage resp;
-        try { resp = await _http.SendAsync(req, ct); }
+        string text;
+        try
+        {
+            resp = await _http.SendAsync(req, cts.Token);
+            text = await resp.Content.ReadAsStringAsync(cts.Token);
+        }
         catch (HttpRequestException ex) { throw new ToolException($"{NotRunning} ({ex.Message})"); }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-        { throw new ToolException($"AutoCAD did not answer within {_http.Timeout.TotalSeconds:0} s; it may be busy (a dialog or a long command)."); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { throw new ToolException($"AutoCAD did not answer within {seconds:0} s; it may be busy (a dialog or a long command)."); }
 
-        string text = await resp.Content.ReadAsStringAsync(ct);
         try
         {
             return JsonNode.Parse(text) as JsonObject ?? throw new FormatException();

@@ -7,6 +7,7 @@ Every file is created in a fresh temporary folder; AutoCAD's templates are only 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from typing import Callable
@@ -100,6 +101,7 @@ def _run(base: str, post: Callable, count: Callable, check: Callable, tmp: str) 
     check("set_active_document without name -> 400", s == 400, str(r)[:200])
 
     _save(base, post, count, check, tmp)
+    _plot(base, post, count, check, tmp)
 
     s, r = post(base, "set_active_document", name=home_name)
     check("back to the test drawing", s == 200 and r.get("name") == home_name, str(r)[:200])
@@ -171,3 +173,75 @@ def _save(base: str, post: Callable, count: Callable, check: Callable, tmp: str)
     _, l3 = post(base, "create_line", start=[0, 0], end=[5, 5])
     s, r = post(base, "close_document", save=True)
     check("close_document save", s == 200 and r.get("saved") is True, str(r)[:200])
+
+
+def _pdf(path: str) -> tuple[int, list[tuple[float, float]]]:
+    """Page count and page sizes (points) of a PDF written by AutoCAD."""
+    if not os.path.isfile(path):
+        return 0, []
+    b = open(path, "rb").read()
+    pages = len(re.findall(rb"/Type\s*/Page[^s]", b))
+    boxes = [tuple(float(v) for v in m.split()[2:4]) for m in re.findall(rb"/MediaBox\s*\[([^\]]*)\]", b)]
+    return pages, boxes
+
+
+def _plot(base: str, post: Callable, count: Callable, check: Callable, tmp: str) -> None:
+    """Step 3: plot_to_pdf."""
+    post(base, "new_document", template="acadiso")
+    post(base, "create_polyline", points=[[0, 0], [4000, 0], [4000, 3000], [0, 3000]], closed=True)
+    _, txt = post(base, "create_text", text="PDF TEST", position=[500, 2500], height=200)
+
+    f = os.path.join(tmp, "model.pdf")
+    s, r = post(base, "plot_to_pdf", path=f, paper="A4")
+    pages, boxes = _pdf(f)
+    sheet = (r.get("sheets") or [{}])[0]
+    check("plot_to_pdf current layout (Model, extents, fit)", s == 200 and pages == 1 and sheet.get("layout") == "Model"
+          and sheet.get("area") == "extents" and sheet.get("scale") == "fit", str(r)[:300])
+    check("wide area prints on a landscape page", boxes and boxes[0][0] > boxes[0][1], str(boxes))
+
+    f = os.path.join(tmp, "all.pdf")
+    s, r = post(base, "plot_to_pdf", path=f, layouts="*")
+    pages, _ = _pdf(f)
+    check("plot_to_pdf all paper layouts into one PDF", s == 200 and pages == 2
+          and [x.get("layout") for x in r.get("sheets", [])] == ["Layout1", "Layout2"], str(r)[:300])
+    _, lay = post(base, "list_layouts")
+    check("current layout is restored after plotting", [x["name"] for x in lay.get("layouts", []) if x.get("current")] == ["Model"], str(lay)[:200])
+
+    sub = os.path.join(tmp, "sheets")
+    os.mkdir(sub)
+    s, r = post(base, "plot_to_pdf", path=sub, layouts=["Model", "Layout1"], separate_files=True)
+    names = sorted(os.listdir(sub))
+    check("plot_to_pdf separate files", s == 200 and len(r.get("files", [])) == 2 and len(names) == 2
+          and all(n.endswith(("-Model.pdf", "-Layout1.pdf")) for n in names), str(names))
+
+    f = os.path.join(tmp, "a1.pdf")
+    s, r = post(base, "plot_to_pdf", path=f, layouts="Model", paper="A1", scale=10)
+    sheet = (r.get("sheets") or [{}])[0]
+    check("plot_to_pdf paper A1, scale 1:10", s == 200 and "A1" in sheet.get("paper", "") and sheet.get("scale") == "1:10", str(r)[:300])
+    f = os.path.join(tmp, "win.pdf")
+    s, r = post(base, "plot_to_pdf", path=f, layouts="Model", p1=[0, 0], p2=[1000, 2000], plot_style="monochrome")
+    pages, boxes = _pdf(f)
+    check("plot_to_pdf window, plot style, tall area on a portrait page", s == 200 and pages == 1
+          and (r.get("sheets") or [{}])[0].get("area") == "window" and boxes and boxes[0][0] < boxes[0][1], str(r)[:300])
+
+    _, line = post(base, "create_line", start=[0, 0], end=[10, 10])
+    s, r = post(base, "plot_to_pdf", path=f, layouts="Model")
+    check("plot_to_pdf onto an existing file -> 409", s == 409 and r.get("code") == "file_exists", str(r)[:200])
+    s, r = post(base, "plot_to_pdf", path=f, layouts="Model", overwrite=True)
+    check("plot_to_pdf overwrite", s == 200, str(r)[:200])
+    s, u = post(base, "undo")
+    _, p = post(base, "get_entity_properties", handles=[line.get("handle"), txt.get("handle")])
+    items = p.get("items") or [{}, {}]
+    check("undo after plotting reverts the last change only", s == 200 and "error" in items[0] and "error" not in items[1], str(p)[:300])
+
+    for name, args, code in [
+        ("unknown layout", {"path": os.path.join(tmp, "x.pdf"), "layouts": "Nope"}, 404),
+        ("unknown paper", {"path": os.path.join(tmp, "x.pdf"), "paper": "Z9"}, 404),
+        ("unknown plot style", {"path": os.path.join(tmp, "x.pdf"), "plot_style": "nope.ctb"}, 404),
+        ("scale on a paper layout", {"path": os.path.join(tmp, "x.pdf"), "layouts": "Layout1", "scale": 5}, 400),
+        ("wrong extension", {"path": os.path.join(tmp, "x.dwg")}, 400),
+        ("separate_files with a missing folder", {"path": os.path.join(tmp, "nope"), "separate_files": True}, 404),
+    ]:
+        s, r = post(base, "plot_to_pdf", **args)
+        check(f"plot_to_pdf {name} -> {code}", s == code, str(r)[:200])
+    post(base, "close_document", discard_changes=True)

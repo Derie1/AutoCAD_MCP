@@ -9,3 +9,5 @@ __pycache__/
 
 # AutoCAD crash reports written into the working folder
 ErrorReports/
+# AutoCAD plot log written into the working folder by test sessions
+plot.log

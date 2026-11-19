@@ -26,6 +26,7 @@ internal static class Routes
             Route.Main("close_document", FileHandlers.CloseDocument),
             Route.Main("save_document", FileHandlers.SaveDocument),
             Route.Main("save_as", FileHandlers.SaveAs),
+            Route.Main("plot_to_pdf", PlotHandlers.PlotToPdf),
 
             Route.Main("list_layers", CatalogHandlers.ListLayers),
             Route.Main("list_blocks", CatalogHandlers.ListBlocks),
