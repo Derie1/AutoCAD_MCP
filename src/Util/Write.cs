@@ -76,6 +76,34 @@ internal static class Write
         try { doc.Editor.UpdateScreen(); } catch { /* cosmetic */ }
         return result;
     }
+
+    /// <summary>
+    /// Like Run, but without an outer transaction: for database operations that must not run inside one
+    /// (binding, detaching, reloading external references). The body opens its own transactions.
+    /// </summary>
+    public static JsonObject RunLocked(string tool, Func<Document, JsonObject> body)
+    {
+        var doc = JsonUtil.ActiveDocument();
+        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+            throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
+        if (doc.IsReadOnly)
+            throw new BridgeException("read_only", "the drawing is open read-only", 409);
+
+        string cmd = "MCP_" + tool.ToUpperInvariant();
+        JsonObject result;
+        bool done = false;
+        try
+        {
+            using (doc.LockDocument(DocumentLockMode.Write, cmd, cmd, false))
+            {
+                result = body(doc);
+                done = true;
+            }
+        }
+        finally { UndoTracker.Recorded(doc, done); }
+        try { doc.Editor.Regen(); } catch { /* cosmetic */ }
+        return result;
+    }
 }
 
 /// <summary>

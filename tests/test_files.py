@@ -102,6 +102,7 @@ def _run(base: str, post: Callable, count: Callable, check: Callable, tmp: str) 
 
     _save(base, post, count, check, tmp)
     _plot(base, post, count, check, tmp)
+    _xrefs(base, post, count, check, tmp)
 
     s, r = post(base, "set_active_document", name=home_name)
     check("back to the test drawing", s == 200 and r.get("name") == home_name, str(r)[:200])
@@ -244,4 +245,80 @@ def _plot(base: str, post: Callable, count: Callable, check: Callable, tmp: str)
     ]:
         s, r = post(base, "plot_to_pdf", **args)
         check(f"plot_to_pdf {name} -> {code}", s == code, str(r)[:200])
+    post(base, "close_document", discard_changes=True)
+
+
+def _xrefs(base: str, post: Callable, count: Callable, check: Callable, tmp: str) -> None:
+    """Step 4: attach_xref, manage_xrefs."""
+    def xrefs() -> dict:
+        _, r = post(base, "list_xrefs")
+        return {x["name"]: x for x in r.get("xrefs", [])}
+
+    def layers() -> set:
+        _, r = post(base, "list_layers", with_counts=False)
+        return {x["name"] for x in r.get("layers", [])}
+
+    os.mkdir(os.path.join(tmp, "x"))
+    src = os.path.join(tmp, "x", "Part.dwg")
+    post(base, "new_document", template="acadiso")
+    post(base, "create_layer", name="PART", color=1)
+    post(base, "create_circle", center=[0, 0], radius=500, layer="PART")
+    post(base, "save_as", path=src)
+    post(base, "close_document")
+
+    post(base, "new_document", template="acadiso")
+    s, r = post(base, "attach_xref", path=src)
+    check("attach_xref in an unsaved drawing stores the full path", s == 200 and r.get("status") == "Resolved"
+          and os.path.normcase(r.get("path", "")) == os.path.normcase(os.path.realpath(src)), str(r)[:300])
+    s, u = post(base, "undo")
+    check("undo removes the attached xref", s == 200 and xrefs() == {}, str(xrefs())[:200])
+
+    host = os.path.join(tmp, "Host.dwg")
+    post(base, "save_as", path=host)
+    s, r = post(base, "attach_xref", path=src, position=[1000, 0], scale=2, rotation_deg=30)
+    check("attach_xref relative path, position, scale, rotation", s == 200 and r.get("path") == r".\x\Part.dwg"
+          and r.get("scale") == 2 and r.get("handle"), str(r)[:300])
+    _, p = post(base, "get_entity_properties", handles=[r.get("handle")])
+    item = (p.get("items") or [{}])[0]
+    check("the xref reference is in the drawing", item.get("type") == "INSERT" and "Part|PART" in layers(), str(item)[:300])
+    s, r = post(base, "attach_xref", path=src)
+    check("attach_xref with a name in use -> 409", s == 409 and r.get("code") == "name_in_use", str(r)[:200])
+    s, r = post(base, "attach_xref", path=src, name="PartOv", overlay=True, path_type="full")
+    check("attach_xref overlay with full path", s == 200 and r.get("overlay") is True and os.path.isabs(r.get("path", "")), str(r)[:300])
+
+    s, r = post(base, "manage_xrefs", action="unload", names="Part")
+    check("manage_xrefs unload", s == 200 and xrefs().get("Part", {}).get("status") == "Unloaded", str(r)[:300])
+    s, r = post(base, "manage_xrefs", action="bind", names="Part")
+    check("bind an unloaded xref -> 409", s == 409 and r.get("code") == "not_loaded", str(r)[:200])
+    s, r = post(base, "manage_xrefs", action="reload", names="*")
+    check("manage_xrefs reload all", s == 200 and all(x.get("status") == "Resolved" for x in xrefs().values()), str(r)[:300])
+
+    copy_path = os.path.join(tmp, "x", "Part2.dwg")
+    shutil.copy(src, copy_path)
+    s, r = post(base, "manage_xrefs", action="repath", names="PartOv", path=copy_path)
+    check("manage_xrefs repath", s == 200 and xrefs().get("PartOv", {}).get("path", "").endswith("Part2.dwg"), str(r)[:300])
+
+    s, r = post(base, "manage_xrefs", action="bind", names="Part")
+    check("manage_xrefs bind (layers Part$0$PART)", s == 200 and "Part" not in xrefs() and "Part$0$PART" in layers(), str(r)[:300])
+    s, u = post(base, "undo")
+    check("undo reverts the bind", s == 200 and "Part" in xrefs() and "Part$0$PART" not in layers(), str(xrefs())[:200])
+    s, r = post(base, "manage_xrefs", action="insert", names="PartOv")
+    check("manage_xrefs insert (layers merged)", s == 200 and "PartOv" not in xrefs() and "PART" in layers(), str(r)[:300])
+    s, r = post(base, "manage_xrefs", action="detach", names="Part")
+    check("manage_xrefs detach", s == 200 and xrefs() == {}, str(r)[:300])
+
+    for name, args, code in [
+        ("unknown name", {"action": "reload", "names": "Nope"}, 404),
+        ("unknown action", {"action": "explode", "names": "*"}, 400),
+        ("without names", {"action": "reload"}, 400),
+    ]:
+        s, r = post(base, "manage_xrefs", **args)
+        check(f"manage_xrefs {name} -> {code}", s == code, str(r)[:200])
+    for name, args, code in [
+        ("missing file", {"path": os.path.join(tmp, "nope.dwg")}, 404),
+        ("itself", {"path": host}, 400),
+        ("not a dwg", {"path": os.path.join(tmp, "x.pdf")}, 400),
+    ]:
+        s, r = post(base, "attach_xref", **args)
+        check(f"attach_xref {name} -> {code}", s == code, str(r)[:200])
     post(base, "close_document", discard_changes=True)

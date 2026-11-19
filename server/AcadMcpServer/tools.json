@@ -486,6 +486,156 @@
       }
     },
     {
+      "name": "attach_xref",
+      "description": "Attach another DWG as an external reference (xref) and insert it into the current space of the\nactive drawing (model or the current layout).\n\npath: full path of the .dwg. name defaults to the file name. overlay: true attaches as an overlay\n(not seen by drawings that reference this one). path_type: relative (default when this drawing is\nsaved; same drive only) or full. Returns the xref name, stored path, status and the handle of the\ninserted reference. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "description": "Full path of the DWG to reference.",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Xref (block) name. Default: the file name without extension."
+          },
+          "overlay": {
+            "default": false,
+            "description": "Attach as overlay instead of attachment.",
+            "type": "boolean"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Insertion point [x, y]. Default: [0, 0]."
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Uniform scale. Default: 1."
+          },
+          "rotation_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Rotation in degrees. Default: 0."
+          },
+          "path_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "relative",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How the path is stored. Default: relative if the drawing is saved, else full."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "manage_xrefs",
+      "description": "Manage external references of the active drawing (names from list_xrefs, '*' for all top-level):\n- reload: load again from the file (after it changed or was unloaded);\n- unload: hide without removing (keeps the reference, frees memory);\n- detach: remove the reference and all its insertions;\n- bind: make it part of this drawing as a block, layers renamed XREF$0$LAYER (like BIND);\n- insert: same, but layers and styles merge with this drawing's names (like BIND Insert);\n- repath: point one reference to another file (path), then reload it.\nOnly loaded references can be bound. Returns the xref list afterwards. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "reload",
+              "unload",
+              "detach",
+              "bind",
+              "insert",
+              "repath"
+            ],
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "Xref name(s) or '*' for all top-level references."
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "repath only: full path of the new DWG."
+          }
+        },
+        "required": [
+          "action",
+          "names"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "list_layers",
       "description": "Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,\nplottable, current, from_xref, description and the number of entities on each.",
       "inputSchema": {
