@@ -18,6 +18,13 @@ internal static class Routes
             Route.Main("get_selection", QueryHandlers.GetSelection),
             Route.Main("get_system_variable", QueryHandlers.GetSystemVariable),
             Route.Main("list_documents", CatalogHandlers.ListDocuments),
+
+            // files
+            Route.Main("new_document", FileHandlers.NewDocument),
+            Route.Main("open_document", FileHandlers.OpenDocument),
+            Route.Main("set_active_document", FileHandlers.SetActiveDocument),
+            Route.Main("close_document", FileHandlers.CloseDocument),
+
             Route.Main("list_layers", CatalogHandlers.ListLayers),
             Route.Main("list_blocks", CatalogHandlers.ListBlocks),
             Route.Main("list_layouts", CatalogHandlers.ListLayouts),

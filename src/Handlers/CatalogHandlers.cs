@@ -22,8 +22,7 @@ internal static class CatalogHandlers
                 ["path"] = d.IsNamedDrawing ? d.Name : null,
                 ["active"] = d == active,
                 ["read_only"] = d.IsReadOnly,
-                // DBMOD is only readable for the active drawing.
-                ["has_unsaved_changes"] = d == active ? Convert.ToInt32(AcApp.GetSystemVariable("DBMOD")) != 0 : null,
+                ["has_unsaved_changes"] = FileHandlers.ModifiedOrNull(d),
             });
         }
         return new JsonObject { ["count"] = items.Count, ["documents"] = items };

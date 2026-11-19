@@ -192,9 +192,127 @@
     },
     {
       "name": "list_documents",
-      "description": "Drawings open in AutoCAD: name, path (null if never saved), active, read_only,\nhas_unsaved_changes (known only for the active drawing). All other tools work on the active drawing.",
+      "description": "Drawings open in AutoCAD: name, path (null if never saved), active, read_only, has_unsaved_changes.\nAll other tools work on the active drawing; switch with set_active_document.",
       "inputSchema": {
         "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "new_document",
+      "description": "Create a new drawing from a template and make it the active drawing.\n\ntemplate: a .dwt file name from AutoCAD's template folder (e.g. 'acadiso.dwt', 'acad') or a full path;\ndefault: the QNEW template from AutoCAD's options, else acadiso.dwt / acad.dwt. An unknown name returns\nthe list of available templates. The new drawing is unnamed until saved. Not an undo step.",
+      "inputSchema": {
+        "properties": {
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Template file name or full path to a .dwt."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "open_document",
+      "description": "Open a drawing file (.dwg, .dxf, .dwt) and make it the active drawing.\n\npath must be a full path. If the drawing is already open it is only made active (already_open: true).\nA file in use by another program or user is refused (file_in_use) unless read_only is true. Opening a file\nmay close AutoCAD's untouched startup drawing (AutoCAD's own behavior). Not an undo step.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "description": "Full path, e.g. C:\\Projects\\plan.dwg.",
+            "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "description": "Open read-only: nothing can be changed or saved.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_active_document",
+      "description": "Make another open drawing the active one; all other tools then work on it. Give name or path\n(see list_documents). Returns the drawing's name, path, read_only and has_unsaved_changes.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "File name of an open drawing, e.g. 'Plan.dwg' or 'Plan' (see list_documents)."
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Full path of an open drawing (when two open drawings share a name)."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "close_document",
+      "description": "Close an open drawing (default: the active one).\n\nA drawing with unsaved changes is closed only with save: true (saves to its own file; a never-saved\ndrawing needs save_as first) or discard_changes: true (the changes are lost). Ask the user before\ndiscarding changes. Returns which drawing is active afterwards. Cannot be undone.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "File name of an open drawing, e.g. 'Plan.dwg' or 'Plan' (see list_documents)."
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Full path of an open drawing (when two open drawings share a name)."
+          },
+          "save": {
+            "default": false,
+            "description": "Save to the drawing's own file before closing.",
+            "type": "boolean"
+          },
+          "discard_changes": {
+            "default": false,
+            "description": "Close without saving; unsaved changes are lost.",
+            "type": "boolean"
+          }
+        },
         "type": "object"
       }
     },
