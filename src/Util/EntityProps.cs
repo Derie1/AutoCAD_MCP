@@ -93,6 +93,9 @@ internal static class EntityProps
                 o["attributes"] = Attributes(br, tr);
                 if (br.IsDynamicBlock) o["dynamic_properties"] = DynamicProps(br);
                 break;
+            case MLeader ml:
+                AcadMcpBridge.Handlers.MLeaderHandlers.Fill(o, ml, tr);
+                break;
             case Dimension d:
                 AcadMcpBridge.Handlers.DimensionHandlers.Fill(o, d, tr);
                 break;

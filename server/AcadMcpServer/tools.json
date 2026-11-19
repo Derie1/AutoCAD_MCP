@@ -2101,6 +2101,147 @@
       }
     },
     {
+      "name": "create_mleader",
+      "description": "Create a multileader (MLEADER) with text: an arrow pointing at something and a label.\n\npoints go from the arrow tip to the point near the text, e.g. [[1000, 500], [1800, 1200]]; the text is\nplaced next to the last point (on the side the leader points to) unless text_position is given.\nextra_leaders adds more arrows to the same label. Arrow, text style and height, landing come from the\nmultileader style (set_mleader_style). Returns the new multileader. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "description": "Leader points: arrow tip first, the point near the text last (at least 2)."
+          },
+          "text": {
+            "description": "Label text; line breaks allowed (\\n).",
+            "type": "string"
+          },
+          "text_position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where to put the text [x, y]; default: next to the last point."
+          },
+          "extra_leaders": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "More leaders to the same text, each a point list like 'points'."
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Multileader style name. Default: the current one."
+          },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height override. Default: from the style."
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
+          }
+        },
+        "required": [
+          "points",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "insert_block",
       "description": "Insert a block reference with attribute values and dynamic properties.\nUnknown tags or properties are refused with the list of valid ones. One undo step.",
       "inputSchema": {

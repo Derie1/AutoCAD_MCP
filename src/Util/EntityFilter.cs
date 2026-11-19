@@ -130,6 +130,7 @@ internal sealed class EntityFilter
             case DBText t: return _text!.IsMatch(t.TextString);
             case MText m: return _text!.IsMatch(m.Text);
             case Dimension d: return !string.IsNullOrEmpty(d.DimensionText) && _text!.IsMatch(d.DimensionText);
+            case MLeader ml: return ml.ContentType == ContentType.MTextContent && ml.MText is MText mt && _text!.IsMatch(mt.Text);
             case Table tb:
                 for (int r = 0; r < tb.Rows.Count; r++)
                     for (int c = 0; c < tb.Columns.Count; c++)

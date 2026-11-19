@@ -27,7 +27,7 @@
   <PropertyGroup>
     <AssemblyName>AcadMcpBridge</AssemblyName>
     <RootNamespace>AcadMcpBridge</RootNamespace>
-    <Version>0.3.6</Version>
+    <Version>0.3.7</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
