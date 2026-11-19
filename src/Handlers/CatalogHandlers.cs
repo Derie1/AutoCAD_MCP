@@ -275,7 +275,7 @@ internal static class CatalogHandlers
         return counts;
     }
 
-    private static Regex? Wildcard(string? pattern) =>
+    internal static Regex? Wildcard(string? pattern) =>
         pattern == null ? null
             : new Regex("^" + Regex.Escape(pattern).Replace(@"\*", ".*").Replace(@"\?", ".") + "$",
                         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);

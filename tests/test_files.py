@@ -103,6 +103,7 @@ def _run(base: str, post: Callable, count: Callable, check: Callable, tmp: str) 
     _save(base, post, count, check, tmp)
     _plot(base, post, count, check, tmp)
     _xrefs(base, post, count, check, tmp)
+    _maintenance(base, post, count, check, tmp)
 
     s, r = post(base, "set_active_document", name=home_name)
     check("back to the test drawing", s == 200 and r.get("name") == home_name, str(r)[:200])
@@ -321,4 +322,58 @@ def _xrefs(base: str, post: Callable, count: Callable, check: Callable, tmp: str
     ]:
         s, r = post(base, "attach_xref", **args)
         check(f"attach_xref {name} -> {code}", s == code, str(r)[:200])
+    post(base, "close_document", discard_changes=True)
+
+
+def _maintenance(base: str, post: Callable, count: Callable, check: Callable, tmp: str) -> None:
+    """Step 5: purge, audit. Uses x/Part.dwg from the xref checks."""
+    def layers() -> set:
+        _, r = post(base, "list_layers", with_counts=False)
+        return {x["name"] for x in r.get("layers", [])}
+
+    post(base, "new_document", template="acadiso")
+    post(base, "save_as", path=os.path.join(tmp, "Clean.dwg"))
+    _, ref = post(base, "attach_xref", path=os.path.join(tmp, "x", "Part.dwg"))
+    post(base, "manage_xrefs", action="insert", names="Part")   # block Part + layer PART
+    post(base, "delete_entities", handles=[ref.get("handle")])  # now both unused, the layer only via the block
+    post(base, "create_layer", name="TMP_A")
+    post(base, "create_layer", name="TMP_B")
+    post(base, "create_layer", name="KEEP")
+    post(base, "create_line", start=[0, 0], end=[1, 1], layer="KEEP")
+    post(base, "set_text_style", name="TMP_TEXT", font="Arial")
+
+    s, r = post(base, "purge")
+    would = r.get("would_remove", {})
+    check("purge dry run (default) lists nested objects", s == 200 and r.get("dry_run") is True and r.get("passes") == 2
+          and {"PART", "TMP_A", "TMP_B"} <= set(would.get("layers", [])) and "KEEP" not in would.get("layers", [])
+          and "0" not in would.get("layers", []) and would.get("blocks") == ["Part"] and "TMP_TEXT" in would.get("text_styles", []),
+          str(r)[:400])
+    check("purge dry run changes nothing", {"PART", "TMP_A", "TMP_B"} <= layers())
+
+    s, r = post(base, "purge", kinds=["layers"], names="TMP_*", dry_run=False)
+    check("purge layers by mask", s == 200 and r.get("removed", {}).get("layers") == ["TMP_A", "TMP_B"]
+          and "TMP_A" not in layers() and "PART" in layers(), str(r)[:300])
+    s, u = post(base, "undo")
+    check("undo restores purged layers", s == 200 and {"TMP_A", "TMP_B"} <= layers(), str(u)[:200])
+    s, r = post(base, "purge", dry_run=False)
+    check("purge everything unused", s == 200 and r.get("total", 0) >= 5 and "PART" not in layers() and "KEEP" in layers(), str(r)[:300])
+    s, r = post(base, "purge", dry_run=False)
+    check("second purge finds nothing", s == 200 and r.get("total") == 0, str(r)[:200])
+    s, r = post(base, "purge", kinds=["nope"])
+    check("purge unknown kind -> 400", s == 400, str(r)[:200])
+
+    _, line = post(base, "create_line", start=[0, 0], end=[5, 0])
+    s, r = post(base, "audit")
+    check("audit of a saved drawing reports the counts", s == 200 and r.get("errors_found") == 0
+          and "AUDIT REPORT" in (r.get("report") or "") and not os.path.exists(os.path.join(tmp, "Clean.adt")), str(r)[:300])
+    s, r = post(base, "audit", fix=True)
+    check("audit fix", s == 200 and r.get("errors_fixed") == 0, str(r)[:300])
+    s, u = post(base, "undo")
+    _, p = post(base, "get_entity_properties", handles=[line.get("handle")])
+    check("undo after audit reverts the last change", s == 200 and "error" in (p.get("items") or [{}])[0], str(p)[:200])
+    post(base, "close_document", discard_changes=True)
+
+    post(base, "new_document")
+    s, r = post(base, "audit")
+    check("audit of an unsaved drawing runs without a report", s == 200 and r.get("report") is None and r.get("note"), str(r)[:300])
     post(base, "close_document", discard_changes=True)

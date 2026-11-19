@@ -20,6 +20,9 @@ internal static class Write
         public Database Db { get; } = doc.Database;
         public Transaction Tr { get; } = tr;
 
+        /// <summary>Set by a body that only previews: the transaction is aborted, nothing changes.</summary>
+        public bool Rollback { get; set; }
+
         /// <summary>Current space (model space or the active layout), opened for write.</summary>
         public BlockTableRecord CurrentSpace() => (BlockTableRecord)Tr.GetObject(Db.CurrentSpaceId, OpenMode.ForWrite);
 
@@ -55,16 +58,20 @@ internal static class Write
             using (doc.LockDocument(DocumentLockMode.Write, cmd, cmd, false))
             using (var tr = doc.TransactionManager.StartTransaction())
             {
+                var ctx = new Ctx(doc, tr);
                 try
                 {
-                    result = body(new Ctx(doc, tr));
+                    result = body(ctx);
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex) when (ex.ErrorStatus == Autodesk.AutoCAD.Runtime.ErrorStatus.OnLockedLayer)
                 {
                     throw new BridgeException("locked_layer", "the object is on a locked layer; unlock the layer first", 409);
                 }
-                tr.Commit();
-                committed = true;
+                if (!ctx.Rollback)
+                {
+                    tr.Commit();
+                    committed = true;
+                }
             }
         }
         finally
@@ -158,6 +165,15 @@ internal static class UndoTracker
     }
 
     public static void BeginOwnUndo() => _ownUndoRunning = true;
+
+    /// <summary>Runs an MCP operation that AutoCAD reports as a command (e.g. COM AuditInfo) without
+    /// mistaking it for the user's own command.</summary>
+    public static void AsOwnCommand(Action a)
+    {
+        bool was = _ownUndoRunning;
+        _ownUndoRunning = true;
+        try { a(); } finally { _ownUndoRunning = was; }
+    }
 
     public static void EndOwnUndo(Document d, int steps)
     {

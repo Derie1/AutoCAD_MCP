@@ -636,6 +636,71 @@
       }
     },
     {
+      "name": "purge",
+      "description": "Remove unused named objects from the active drawing (like PURGE): layers, linetypes, block definitions,\ntext / dimension / table / multileader styles, registered applications. Repeats until nothing more is\nunused (a removed block can free its layers and nested blocks).\n\ndry_run is true by default: it lists exactly what would be removed and changes nothing. Show the list\nto the user, then call again with dry_run: false. Layer 0, Defpoints, current layer and styles,\nStandard styles, Continuous and xref-dependent objects are never removed. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "layers",
+                    "linetypes",
+                    "blocks",
+                    "text_styles",
+                    "dim_styles",
+                    "table_styles",
+                    "mleader_styles",
+                    "regapps"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "What to purge. Default: all kinds."
+          },
+          "names": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name mask with * and ?, e.g. 'TMP_*'. Default: all names."
+          },
+          "dry_run": {
+            "default": true,
+            "description": "Only list what would be removed (default). false purges.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "audit",
+      "description": "Check the active drawing for database errors (like AUDIT). fix: true also repairs them; repairs\ncannot be undone with the undo tool, so ask the user first. For a saved drawing returns\nerrors_found, errors_fixed, objects_erased and the report text; an unsaved drawing gets no report\n(AutoCAD writes it next to the file).",
+      "inputSchema": {
+        "properties": {
+          "fix": {
+            "default": false,
+            "description": "Repair the errors found.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
       "name": "list_layers",
       "description": "Layers of the active drawing: name, color, linetype, lineweight, on, frozen, locked,\nplottable, current, from_xref, description and the number of entities on each.",
       "inputSchema": {

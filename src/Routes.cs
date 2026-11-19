@@ -29,6 +29,8 @@ internal static class Routes
             Route.Main("plot_to_pdf", PlotHandlers.PlotToPdf),
             Route.Main("attach_xref", XrefHandlers.AttachXref),
             Route.Main("manage_xrefs", XrefHandlers.ManageXrefs),
+            Route.Main("purge", MaintenanceHandlers.Purge),
+            Route.Main("audit", MaintenanceHandlers.Audit),
 
             Route.Main("list_layers", CatalogHandlers.ListLayers),
             Route.Main("list_blocks", CatalogHandlers.ListBlocks),
