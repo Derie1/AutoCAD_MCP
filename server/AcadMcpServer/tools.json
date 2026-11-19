@@ -399,6 +399,122 @@
       }
     },
     {
+      "name": "capture_view",
+      "description": "Take a picture (PNG) of the drawing to look at it: the current view, all objects, a window or chosen objects.\n\nThe picture is rendered off-screen: the user's view in AutoCAD does not move (use zoom to change it).\nIt shows the current space (model space, a layout, or the model space of the active viewport) with the\ncurrent view direction. Returns the image plus layout, space, image size and drawing_units_per_pixel\n(to estimate coordinates from the picture). Use it to check layouts of new objects, overlaps of texts\nand dimensions, or to understand an unknown drawing.",
+      "inputSchema": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current",
+                  "extents",
+                  "window",
+                  "entities"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "current = what the user sees now; extents = all visible objects of the current space; window = the box p1-p2; entities = the objects given by handles or filter. Default: entities if handles/filter are given, window if p1 is given, otherwise current."
+          },
+          "p1": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode window: one corner [x, y] or [x, y, z] (WCS)."
+          },
+          "p2": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode window: the opposite corner."
+          },
+          "handles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode entities: handles of the objects to show. Use this OR filter."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "mode entities: find_entities keys (types, layers, blocks, window, text). Without 'space' only objects of the current space are used."
+          },
+          "padding": {
+            "default": 0.05,
+            "description": "Margin around the area as a share of its size on each side (0-1). Not used in mode current.",
+            "type": "number"
+          },
+          "size": {
+            "default": 1500,
+            "description": "Length of the longer image side in pixels (100-4000). The other side follows the area's proportions.",
+            "type": "integer"
+          },
+          "background": {
+            "default": "dark",
+            "description": "dark (like AutoCAD model space) or light (white, like paper).",
+            "enum": [
+              "dark",
+              "light"
+            ],
+            "type": "string"
+          },
+          "save_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Also save the PNG to this full path (folder must exist), e.g. for a report. Only when the user wants a file."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
       "name": "get_table",
       "description": "Read the contents of an AutoCAD table (ACAD_TABLE).\n\nReturns rows/columns count, range read, cells as a 2D array [row][column] (0-based; row 0 is\nusually the title, row 1 the header; see row_styles: _TITLE/_HEADER/_DATA), row_heights,\ncolumn_widths, merged ranges [top, left, bottom, right] (only the top-left cell of a merged\nrange has the value, the others are null), formulas [{row, column, formula, value}],\nlocked_cells (content locked or read-only, e.g. linked to Excel: they cannot be written),\nblock_cells (block name and attribute values), data_links and, if the user has selected\ncells inside the table, selected_cells. Tables over 5000 cells are returned in parts:\n\"truncated\" is true and \"hint\" says which rows to read next.",
       "inputSchema": {

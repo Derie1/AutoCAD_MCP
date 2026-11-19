@@ -15,43 +15,20 @@ internal static class ViewHandlers
     {
         var doc = Ready();
         var db = doc.Database;
-        string mode = (Args.Str(a, "mode")
-                       ?? (a["handles"] != null || a["filter"] != null ? "entities" : a["p1"] != null ? "window" : "extents"))
-                      .ToLowerInvariant();
-        double padding = Args.Num(a, "padding") ?? 0.05;
-        if (padding is < 0 or > 1) throw new BridgeException("bad_request", "'padding' must be from 0 to 1 (share of the window size)");
-
-        Extents3d? ext;
-        int count = 0;
-        switch (mode)
-        {
-            case "extents":
-                ext = SpaceExtents(db, db.CurrentSpaceId, out count);
-                if (ext == null) throw new BridgeException("empty", "the current space has no visible objects to zoom to", 404);
-                break;
-            case "window":
-                var p1 = Args.Point(a, "p1", true)!.Value;
-                var p2 = Args.Point(a, "p2", true)!.Value;
-                ext = new Extents3d(
-                    new Point3d(Math.Min(p1.X, p2.X), Math.Min(p1.Y, p2.Y), Math.Min(p1.Z, p2.Z)),
-                    new Point3d(Math.Max(p1.X, p2.X), Math.Max(p1.Y, p2.Y), Math.Max(p1.Z, p2.Z)));
-                break;
-            case "entities":
-                ext = EntitiesExtents(db, a, out count);
-                break;
-            default:
-                throw new BridgeException("bad_request", "'mode' must be extents, window or entities");
-        }
+        string mode = Mode(a, "extents");
+        double padding = Padding(a);
+        var ext = Region(a, db, mode, out int count)
+                  ?? throw new BridgeException("bad_request", "'mode' must be extents, window or entities");
 
         // No document lock: a lock would add an UNDO group, and the undo tool must not revert a zoom
         // instead of the assistant's change. SetCurrentView works without one.
         var view = doc.Editor.GetCurrentView();
-        Fit(view, ext.Value, padding);
+        Fit(view, ext, padding);
         doc.Editor.SetCurrentView(view);
         var result = Describe(doc);
         result["mode"] = mode;
         if (mode != "window") result["objects"] = count;
-        result["zoomed_to"] = new JsonObject { ["min"] = JsonUtil.Point(ext.Value.MinPoint), ["max"] = JsonUtil.Point(ext.Value.MaxPoint) };
+        result["zoomed_to"] = new JsonObject { ["min"] = JsonUtil.Point(ext.MinPoint), ["max"] = JsonUtil.Point(ext.MaxPoint) };
         return result;
     }
 
@@ -114,7 +91,44 @@ internal static class ViewHandlers
         }
     }
 
-    private static Document Ready()
+    /// <summary>"mode" argument; without it: entities if handles/filter are given, window if p1 is, else the fallback.</summary>
+    internal static string Mode(JsonObject a, string fallback) =>
+        (Args.Str(a, "mode")
+         ?? (a["handles"] != null || a["filter"] != null ? "entities" : a["p1"] != null ? "window" : fallback))
+        .ToLowerInvariant();
+
+    internal static double Padding(JsonObject a)
+    {
+        double padding = Args.Num(a, "padding") ?? 0.05;
+        if (padding is < 0 or > 1) throw new BridgeException("bad_request", "'padding' must be from 0 to 1 (share of the window size)");
+        return padding;
+    }
+
+    /// <summary>WCS box for the modes extents / window / entities; null for any other mode (caller decides).</summary>
+    internal static Extents3d? Region(JsonObject a, Database db, string mode, out int count)
+    {
+        count = 0;
+        switch (mode)
+        {
+            case "extents":
+                return SpaceExtents(db, db.CurrentSpaceId, out count)
+                       ?? throw new BridgeException("empty", "the current space has no visible objects", 404);
+            case "window":
+                var p1 = Args.Point(a, "p1", true)!.Value;
+                var p2 = Args.Point(a, "p2", true)!.Value;
+                if (Math.Abs(p1.X - p2.X) < 1e-9 && Math.Abs(p1.Y - p2.Y) < 1e-9)
+                    throw new BridgeException("bad_request", "'p1' and 'p2' must be different corners");
+                return new Extents3d(
+                    new Point3d(Math.Min(p1.X, p2.X), Math.Min(p1.Y, p2.Y), Math.Min(p1.Z, p2.Z)),
+                    new Point3d(Math.Max(p1.X, p2.X), Math.Max(p1.Y, p2.Y), Math.Max(p1.Z, p2.Z)));
+            case "entities":
+                return EntitiesExtents(db, a, out count);
+            default:
+                return null;
+        }
+    }
+
+    internal static Document Ready()
     {
         var doc = JsonUtil.ActiveDocument();
         if (!string.IsNullOrEmpty(doc.CommandInProgress))
@@ -214,9 +228,27 @@ internal static class ViewHandlers
     /// <summary>Sets the view so the WCS box fits with the given padding, keeping the window's aspect ratio.</summary>
     private static void Fit(ViewTableRecord view, Extents3d ext, double padding)
     {
-        var wcsToDcs = (Matrix3d.Rotation(-view.ViewTwist, view.ViewDirection, view.Target) *
-                        Matrix3d.Displacement(view.Target - Point3d.Origin) *
-                        Matrix3d.PlaneToWorld(view.ViewDirection)).Inverse();
+        var (center, w, h) = FitBox(view, ext, padding, view.Height > 0 ? view.Width / view.Height : 1);
+        view.CenterPoint = center;
+        view.Width = w;
+        view.Height = h;
+    }
+
+    /// <summary>DCS -> WCS of a view (its plane through the target, twisted).</summary>
+    internal static Matrix3d DcsToWcs(AbstractViewTableRecord view) => DcsToWcs(view.Target, view.ViewDirection, view.ViewTwist);
+
+    internal static Matrix3d DcsToWcs(Point3d target, Vector3d direction, double twist) =>
+        Matrix3d.Rotation(-twist, direction, target) *
+        Matrix3d.Displacement(target - Point3d.Origin) *
+        Matrix3d.PlaneToWorld(direction);
+
+    /// <summary>
+    /// The window (center and size in the view's DCS) that shows the WCS box with padding.
+    /// ratio = width/height to keep; 0 = use the box's own proportions.
+    /// </summary>
+    internal static (Point2d Center, double Width, double Height) FitBox(AbstractViewTableRecord view, Extents3d ext, double padding, double ratio)
+    {
+        var wcsToDcs = DcsToWcs(view).Inverse();
         Extents3d? dcs = null;
         var lo = ext.MinPoint;
         var hi = ext.MaxPoint;
@@ -233,11 +265,10 @@ internal static class ViewHandlers
         if (size <= 1e-9) size = 1;
         w = Math.Max(w, size * 1e-3) * (1 + 2 * padding);
         h = Math.Max(h, size * 1e-3) * (1 + 2 * padding);
-        double ratio = view.Height > 0 ? view.Width / view.Height : 1;
-        if (w / h > ratio) h = w / ratio; else w = h * ratio;
-
-        view.CenterPoint = new Point2d((d.MinPoint.X + d.MaxPoint.X) / 2, (d.MinPoint.Y + d.MaxPoint.Y) / 2);
-        view.Width = w;
-        view.Height = h;
+        if (ratio > 0)
+        {
+            if (w / h > ratio) h = w / ratio; else w = h * ratio;
+        }
+        return (new Point2d((d.MinPoint.X + d.MaxPoint.X) / 2, (d.MinPoint.Y + d.MaxPoint.Y) / 2), w, h);
     }
 }

@@ -299,7 +299,7 @@ async def test_mcp(port: int) -> None:
             info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
             check("server identifies as autocad", getattr(info, "name", None) == "autocad", str(info))
             tools = {t.name for t in (await session.list_tools()).tools}
-            check("36 tools listed", len(tools) == 36 and {"health_check", "get_table", "set_table_cells"} <= tools, str(len(tools)))
+            check("37 tools listed", len(tools) == 37 and {"health_check", "get_table", "capture_view"} <= tools, str(len(tools)))
             for name in sorted(tools & READ_ONLY_TOOLS):
                 res = await session.call_tool(name, {})
                 check(f"call {name}", not getattr(res, "is_error", False) and not getattr(res, "isError", False),
@@ -310,6 +310,12 @@ async def test_mcp(port: int) -> None:
                   and "Error executing tool get_table" in text and "[" in text, text[:200])
             res = await session.call_tool("find_entities", {"types": "LINE", "limit": 1})
             check("arguments are passed through", '"total"' in (res.content[0].text if res.content else ""), str(res)[:200])
+            res = await session.call_tool("capture_view", {"mode": "extents", "size": 300})
+            kinds = [c.type for c in res.content]
+            img = next((c for c in res.content if c.type == "image"), None)
+            check("capture_view returns image content + text", kinds == ["image", "text"] and img is not None
+                  and getattr(img, "mime_type", getattr(img, "mimeType", None)) == "image/png" and img.data.startswith("iVBOR")
+                  and '"image_width":300' in res.content[1].text and '"data"' not in res.content[1].text, str(kinds))
 
 
 def main() -> int:

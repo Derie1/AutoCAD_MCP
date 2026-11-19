@@ -27,6 +27,7 @@ internal static class Routes
             // view
             Route.Main("zoom", ViewHandlers.Zoom),
             Route.Main("set_current_layout", ViewHandlers.SetCurrentLayout),
+            Route.Main("capture_view", CaptureHandlers.CaptureView),
 
             // tables and attributes
             Route.Main("get_table", TableHandlers.GetTable),

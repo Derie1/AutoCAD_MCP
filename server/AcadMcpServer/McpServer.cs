@@ -115,6 +115,24 @@ internal sealed class McpServer(string version, Bridge bridge)
                 result["server_version"] = version;
             }
             else result = await bridge.CallAsync(name, args, _shutdown.Token);
+
+            // A picture (capture_view) goes to the model as MCP image content, the rest as text.
+            if (result["image"] is JsonObject image && image["data"] is JsonValue data)
+            {
+                result.Remove("image");
+                return new JsonObject
+                {
+                    ["content"] = new JsonArray(
+                        new JsonObject
+                        {
+                            ["type"] = "image",
+                            ["data"] = data.ToString(),
+                            ["mimeType"] = image["mime_type"]?.ToString() ?? "image/png",
+                        },
+                        new JsonObject { ["type"] = "text", ["text"] = result.ToJsonString(Json.Options) }),
+                    ["isError"] = false,
+                };
+            }
             return ToolResult(result.ToJsonString(Json.Options), isError: false);
         }
         catch (ToolException ex)
