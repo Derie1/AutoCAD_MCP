@@ -45,6 +45,26 @@ internal static class Props
         return lt[name];
     }
 
+    /// <summary>
+    /// Common properties of a NEW entity (call after SetDatabaseDefaults): color, linetype and lineweight
+    /// are ByLayer unless given - not the current CECOLOR / CELTYPE / CELWEIGHT, so objects the assistant
+    /// draws follow the layer standard. Layer: the given one or the current layer.
+    /// </summary>
+    public static void ApplyCommon(Write.Ctx ctx, Entity e, JsonObject a)
+    {
+        e.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByLayer, 256);
+        e.LinetypeId = ctx.Db.ByLayerLinetype;
+        e.LineWeight = Autodesk.AutoCAD.DatabaseServices.LineWeight.ByLayer;
+        if (Args.Str(a, "layer") is string layer) e.Layer = ctx.Layer(layer);
+        if (a["color"] is JsonNode c) e.Color = Entities.ColorFromJson(c, "color");
+        if (Args.Str(a, "linetype") is string lt) e.LinetypeId = Linetype(ctx.Db, ctx.Tr, lt);
+        if (a["lineweight"] is JsonNode lw) e.LineWeight = LineWeight(lw, "lineweight");
+    }
+
+    /// <summary>Linetype name of a layer; a layer created without one has a null id (shown as Continuous).</summary>
+    public static string LayerLinetypeName(Transaction tr, LayerTableRecord l) =>
+        l.LinetypeObjectId.IsNull ? "Continuous" : ((LinetypeTableRecord)tr.GetObject(l.LinetypeObjectId, OpenMode.ForRead)).Name;
+
     /// <summary>"ByLayer", "ByBlock" or percent 0-90.</summary>
     public static Autodesk.AutoCAD.Colors.Transparency Transparency(JsonNode n, string name)
     {

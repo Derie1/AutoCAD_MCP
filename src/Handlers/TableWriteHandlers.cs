@@ -295,7 +295,7 @@ internal static class TableWriteHandlers
             t.TableStyle = styleId;
             t.Position = pos;
             t.SetSize(nRows, nCols);
-            if (Args.Str(a, "layer") is string layer) t.Layer = ctx.Layer(layer);
+            Props.ApplyCommon(ctx, t, a);
 
             double? rowHeight = Args.Num(a, "row_height");
             for (int r = 0; r < nRows; r++)

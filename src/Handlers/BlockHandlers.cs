@@ -26,8 +26,7 @@ internal static class BlockHandlers
             Rotation = (Args.Num(a, "rotation_deg") ?? 0) * Math.PI / 180,
         };
         br.SetDatabaseDefaults(ctx.Db);
-        if (Args.Str(a, "layer") is string layer) br.Layer = ctx.Layer(layer);
-        if (a["color"] is JsonNode c) br.Color = Entities.ColorFromJson(c, "color");
+        Props.ApplyCommon(ctx, br, a);
         ctx.Add(ctx.CurrentSpace(), br);
 
         // Attributes: one reference per non-constant definition.

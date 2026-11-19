@@ -941,6 +941,48 @@
             ],
             "default": null,
             "description": "Existing layer name. Default: the current layer."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: ByLayer."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -999,6 +1041,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -1093,6 +1162,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -1145,6 +1241,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -1253,6 +1376,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "type": "object"
@@ -1342,6 +1492,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -1442,6 +1619,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -1537,6 +1741,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [
@@ -1638,6 +1869,33 @@
             ],
             "default": null,
             "description": "\"ByLayer\", \"ByBlock\", an ACI index 1-255 or \"#RRGGBB\". Default: the current color (usually ByLayer)."
+          },
+          "linetype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Linetype name, \"ByLayer\" or \"ByBlock\"; loaded from acadiso.lin/acad.lin if missing. Default: ByLayer."
+          },
+          "lineweight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "\"ByLayer\", \"ByBlock\", \"Default\" or millimetres, e.g. 0.25. Default: ByLayer."
           }
         },
         "required": [

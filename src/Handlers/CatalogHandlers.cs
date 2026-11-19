@@ -47,7 +47,7 @@ internal static class CatalogHandlers
             {
                 ["name"] = l.Name,
                 ["color"] = Entities.ColorToJson(l.Color),
-                ["linetype"] = ((LinetypeTableRecord)tr.GetObject(l.LinetypeObjectId, OpenMode.ForRead)).Name,
+                ["linetype"] = Props.LayerLinetypeName(tr, l),
                 ["lineweight"] = l.LineWeight.ToString(),
                 ["on"] = !l.IsOff,
                 ["frozen"] = l.IsFrozen,

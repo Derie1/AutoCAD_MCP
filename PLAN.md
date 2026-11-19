@@ -581,6 +581,12 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
   MCP-сервер отдаёт поле `image` моста как MCP-контент `image` (PNG base64) + текст с остальным ответом.
   smoke-тест 212/212 в 2026 и 2027.
 
+- 2026-11-19 — **0.3.3 (итерация 2, шаг 3): исправления из раздела 10.** Новый слой получает тип линий
+  Continuous (как команда СЛОЙ); имя типа линий слоя читается безопасно и для слоёв без него (`list_layers`).
+  Все `create_*`, `insert_block` и `create_table` ставят цвет, тип и вес линий **«ПоСлою»**, если параметр не
+  передан, — не CECOLOR/CELTYPE/CELWEIGHT (общий `Props.ApplyCommon`); у всех появились `linetype` и
+  `lineweight`, у `create_table` ещё и `color`. smoke-тест 224/224 в 2026 и 2027.
+
 ## 9. Возможные усовершенствования
 - **Псевдотаблицы из линий и текстов** — распознавать сетку из отрезков/полилиний и тексты в ячейках,
   читать как обычную таблицу; запись — заменой текстов. Частый случай в старых чертежах и схемах щитов.
@@ -590,7 +596,7 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
 ## 10. Известные проблемы
 Список пополняется по результатам тестов. Исправленное — отмечать `[x]` с версией и датой.
 
-- [ ] **`create_layer` без `linetype` падает с `[autocad_error] NullObjectId: eNullObjectId`** (найдено 2026-11-17,
+- [x] *(исправлено в 0.3.3, 2026-11-19)* **`create_layer` без `linetype` падает с `[autocad_error] NullObjectId: eNullObjectId`** (найдено 2026-11-17,
   плагин 0.2.1, AutoCAD 2027, при черчении узла через мост).
   - *Воспроизведение:* `create_layer(name="Тест", color=8, lineweight=0.5)` — без параметра `linetype`.
     С `linetype="Continuous"` (или любым другим) слой создаётся нормально.
@@ -642,7 +648,7 @@ equirements-dev.txt`); выделение — `AI_SELALL` / `AI_DESELECT` (ESC �
     `dynamic_properties` в `set_entity_properties`) — переиспользовать `SetDynamic()` из `BlockHandlers.cs`;
     пакетно по фильтру с `confirm`, как у других изменяющих инструментов.
 
-- [ ] **`insert_block` ставит вставке текущие тип и вес линии вместо «ПоСлою»** (найдено там же).
+- [x] *(исправлено в 0.3.3, 2026-11-19)* **`insert_block` ставит вставке текущие тип и вес линии вместо «ПоСлою»** (найдено там же).
   - *Воспроизведение:* при `CELTYPE = Continuous`, `CELWEIGHT = -3` вставка получила linetype `Continuous`
     и lineweight `Default`, хотя передан `color: "ByLayer"`; пришлось отдельно звать `set_entity_properties`.
   - *Причина:* `SetDatabaseDefaults()` берёт CELTYPE/CELWEIGHT; у `insert_block` нет параметров `linetype` /

@@ -15,7 +15,8 @@ internal static class LayerHandlers
         {
             var lt = (LayerTable)ctx.Tr.GetObject(ctx.Db.LayerTableId, OpenMode.ForWrite);
             if (lt.Has(name)) throw new BridgeException("already_exists", $"layer '{name}' already exists; use set_layer_state", 409);
-            var layer = new LayerTableRecord { Name = name };
+            // Continuous by default, as the LAYER command does; a new record has no linetype otherwise.
+            var layer = new LayerTableRecord { Name = name, LinetypeObjectId = ctx.Db.ContinuousLinetype };
             lt.Add(layer);
             ctx.Tr.AddNewlyCreatedDBObject(layer, true);
             Apply(ctx, layer, a);
@@ -103,7 +104,7 @@ internal static class LayerHandlers
     {
         ["name"] = l.Name,
         ["color"] = Entities.ColorToJson(l.Color),
-        ["linetype"] = ((LinetypeTableRecord)ctx.Tr.GetObject(l.LinetypeObjectId, OpenMode.ForRead)).Name,
+        ["linetype"] = Props.LayerLinetypeName(ctx.Tr, l),
         ["lineweight"] = l.LineWeight.ToString(),
         ["on"] = !l.IsOff,
         ["frozen"] = l.IsFrozen,

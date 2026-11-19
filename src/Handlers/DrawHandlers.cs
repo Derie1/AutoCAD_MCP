@@ -12,13 +12,8 @@ internal static class DrawHandlers
 {
     private const double Deg = Math.PI / 180;
 
-    /// <summary>Applies the optional common properties: layer, color.</summary>
-    private static void Common(Write.Ctx ctx, Entity e, JsonObject a)
-    {
-        string? layer = Args.Str(a, "layer");
-        if (layer != null) e.Layer = ctx.Layer(layer);
-        if (a["color"] is JsonNode c) e.Color = Entities.ColorFromJson(c, "color");
-    }
+    /// <summary>Common properties: layer, color, linetype, lineweight (ByLayer unless given).</summary>
+    private static void Common(Write.Ctx ctx, Entity e, JsonObject a) => Props.ApplyCommon(ctx, e, a);
 
     /// <summary>Defaults, common properties, append, describe.</summary>
     private static JsonObject Add(Write.Ctx ctx, Entity e, JsonObject a)
