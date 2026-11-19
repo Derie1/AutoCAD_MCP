@@ -57,10 +57,11 @@ internal static class EditHandlers
 
     public static JsonObject SetEntityProperties(JsonObject a)
     {
+        var dynamic = Args.Obj(a, "dynamic_properties") is { Count: > 0 } dp ? dp : null;
         bool any = a["layer"] != null || a["color"] != null || a["linetype"] != null || a["lineweight"] != null
-                   || a["linetype_scale"] != null || a["transparency"] != null || a["visible"] != null;
+                   || a["linetype_scale"] != null || a["transparency"] != null || a["visible"] != null || dynamic != null;
         if (!any) throw new BridgeException("bad_request",
-            "nothing to change: pass layer, color, linetype, lineweight, linetype_scale, transparency or visible");
+            "nothing to change: pass layer, color, linetype, lineweight, linetype_scale, transparency, visible or dynamic_properties");
         var targets = Targets.Prepare(a, "set_entity_properties");
         if (targets.Preview != null) return targets.Preview;
 
@@ -76,9 +77,34 @@ internal static class EditHandlers
                 a["transparency"] is JsonNode tp ? Props.Transparency(tp, "transparency") : null;
             bool? visible = a["visible"] != null ? Args.Bool(a, "visible") : null;
 
+            if (dynamic != null)
+            {
+                // All targets must be dynamic block references, otherwise nothing changes.
+                var wrong = targets.Ids
+                    .Where(id => ctx.Tr.GetObject(id, OpenMode.ForRead) is not BlockReference br || br is Table || !br.IsDynamicBlock)
+                    .Select(id => id.Handle.ToString()).ToList();
+                if (wrong.Count > 0)
+                    throw new BridgeException("bad_request",
+                        $"dynamic_properties: {wrong.Count} of {targets.Ids.Count} objects are not dynamic block references " +
+                        $"(e.g. {string.Join(", ", wrong.Take(10))}); nothing was changed");
+            }
+            var dynamicResults = new JsonArray();
+
             foreach (var id in targets.Ids)
             {
                 var e = (Entity)ctx.Tr.GetObject(id, OpenMode.ForWrite);
+                if (dynamic != null && e is BlockReference dbr)
+                {
+                    BlockHandlers.SetDynamic(dbr, dynamic);
+                    if (dynamicResults.Count < 20)
+                    {
+                        var now = new JsonObject();
+                        foreach (DynamicBlockReferenceProperty p in dbr.DynamicBlockReferencePropertyCollection)
+                            if (dynamic.Any(kv => kv.Key.Equals(p.PropertyName, StringComparison.OrdinalIgnoreCase)))
+                                now[p.PropertyName] = JsonUtil.FromObject(p.Value);
+                        dynamicResults.Add(new JsonObject { ["handle"] = id.Handle.ToString(), ["dynamic_properties"] = now });
+                    }
+                }
                 if (layer != null) e.Layer = layer;
                 if (color != null) e.Color = color;
                 if (linetype is ObjectId ltId) e.LinetypeId = ltId;
@@ -87,7 +113,9 @@ internal static class EditHandlers
                 if (transparency is { } t) e.Transparency = t;
                 if (visible is bool v) e.Visible = v;
             }
-            return new JsonObject { ["changed"] = targets.Ids.Count };
+            var result = new JsonObject { ["changed"] = targets.Ids.Count };
+            if (dynamic != null) result["dynamic_blocks"] = dynamicResults;
+            return result;
         });
     }
 

@@ -169,7 +169,14 @@ internal static class BlockHandlers
         else ar.TextString = value;
     }
 
-    private static void SetDynamic(BlockReference br, JsonObject dyn)
+    private static bool SameValue(object? a, object? b)
+    {
+        if (a is string sa || b is string) return string.Equals(a?.ToString(), b?.ToString(), StringComparison.OrdinalIgnoreCase);
+        try { return Math.Abs(Convert.ToDouble(a) - Convert.ToDouble(b)) < 1e-9; }
+        catch { return Equals(a, b); }
+    }
+
+    internal static void SetDynamic(BlockReference br, JsonObject dyn)
     {
         var props = br.DynamicBlockReferencePropertyCollection;
         foreach (var kv in dyn)
@@ -183,9 +190,12 @@ internal static class BlockHandlers
                 throw new BridgeException("bad_request", $"no dynamic property '{kv.Key}'; available: {string.Join(", ", names)}");
             }
             if (p.ReadOnly) throw new BridgeException("bad_request", $"dynamic property '{p.PropertyName}' is read-only");
+            var allowed = p.GetAllowedValues();
+            string AllowedText() => allowed is { Length: > 0 } ? $"; allowed: {string.Join(", ", allowed)}" : "";
+            object value;
             try
             {
-                p.Value = p.Value switch
+                value = p.Value switch
                 {
                     double => kv.Value!.GetValue<double>(),
                     short => (short)kv.Value!.GetValue<double>(),
@@ -195,10 +205,24 @@ internal static class BlockHandlers
             }
             catch (Exception ex) when (ex is not BridgeException)
             {
-                var allowed = p.GetAllowedValues();
-                throw new BridgeException("bad_request", $"value {kv.Value?.ToJsonString()} is not accepted for '{p.PropertyName}'" +
-                    (allowed is { Length: > 0 } ? $"; allowed: {string.Join(", ", allowed)}" : ""));
+                throw new BridgeException("bad_request", $"value {kv.Value?.ToJsonString()} has the wrong type for '{p.PropertyName}'{AllowedText()}");
             }
+            // AutoCAD silently snaps a value outside a list parameter to the nearest allowed one; refuse instead.
+            if (allowed is { Length: > 0 } && !allowed.Any(x => SameValue(x, value)))
+                throw new BridgeException("bad_request", $"value {kv.Value?.ToJsonString()} is not accepted for '{p.PropertyName}'{AllowedText()}");
+            try
+            {
+                p.Value = value;
+            }
+            catch (Exception ex) when (ex is not BridgeException)
+            {
+                throw new BridgeException("bad_request", $"value {kv.Value?.ToJsonString()} is not accepted for '{p.PropertyName}'{AllowedText()}");
+            }
+            // Limits / increments of a parameter can change the value too.
+            if (!SameValue(p.Value, value))
+                throw new BridgeException("bad_request",
+                    $"AutoCAD changed {kv.Value?.ToJsonString()} to {JsonUtil.FromObject(p.Value)?.ToJsonString()} for '{p.PropertyName}' " +
+                    "(parameter limits or increments); nothing was changed");
         }
     }
 }

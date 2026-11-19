@@ -341,6 +341,8 @@ def main() -> int:
         test_tablewrite.run(base, post, count, check)
         import test_fixes
         test_fixes.run(base, post, count, check)
+        import test_dynamic
+        test_dynamic.run(base, post, count, check)
         import test_view
         test_view.run(base, post, count, check)
     asyncio.run(test_mcp(args.port))

@@ -129,3 +129,24 @@ def build_step3(doc) -> dict[str, Any]:
     small = retry(lambda: ms.AddTable(pt(200, -50), 2, 2, 8, 30))
     retry(lambda: small.SetText(1, 0, "x"))
     return {"table_handle": retry(lambda: tb.Handle), "small_table_handle": retry(lambda: small.Handle)}
+
+
+def import_dynamic_block(doc, name: str = "Door - Metric") -> bool:
+    """Copies a dynamic block definition from AutoCAD's own sample drawing into the test drawing.
+
+    Uses ObjectDBX (no command line, no SendCommand). Returns False if the sample is not installed.
+    """
+    import os
+
+    app = retry(lambda: doc.Application)
+    major = retry(lambda: app.Version).split(".")[0]
+    path = os.path.join(os.path.dirname(retry(lambda: app.FullName)),
+                        "Sample", "en-us", "Dynamic Blocks", "Architectural - Metric.dwg")
+    if not os.path.exists(path):
+        return False
+    dbx = retry(lambda: app.GetInterfaceObject(f"ObjectDBX.AxDbDocument.{major}"))
+    retry(lambda: dbx.Open(path))
+    blk = retry(lambda: dbx.Blocks.Item(name))
+    objs = VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_DISPATCH, [blk._oleobj_])
+    retry(lambda: dbx.CopyObjects(objs, doc.Blocks))
+    return True

@@ -2001,7 +2001,7 @@
     },
     {
       "name": "set_entity_properties",
-      "description": "Change layer, color, linetype, lineweight, linetype scale, transparency or visibility of objects.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.",
+      "description": "Change layer, color, linetype, lineweight, linetype scale, transparency or visibility of objects.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.\n\nDynamic blocks: dynamic_properties changes parameters of block references already in the drawing\n(e.g. {\"Distance1\": 3000, \"Visibility1\": \"Open\"}); the handle, attributes and XData stay. Names and\nallowed values: get_entity_properties of the reference. All targets must be dynamic block references.",
       "inputSchema": {
         "properties": {
           "handles": {
@@ -2123,6 +2123,19 @@
               }
             ],
             "default": null
+          },
+          "dynamic_properties": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Dynamic block parameters to set: {property name: value}, e.g. {\"Distance1\": 3000}. Numbers for distances/angles (angles in radians as AutoCAD stores them), text for lists and visibility states."
           },
           "dry_run": {
             "default": false,
