@@ -56,6 +56,12 @@ internal static class Routes
             Route.Main("set_selection", EditHandlers.SetSelection),
             Route.Main("set_system_variable", EditHandlers.SetSystemVariable),
 
+            // styles
+            Route.Main("set_text_style", StyleHandlers.SetTextStyle),
+            Route.Main("set_dim_style", StyleHandlers.SetDimStyle),
+            Route.Main("set_table_style", StyleHandlers.SetTableStyle),
+            Route.Main("set_mleader_style", StyleHandlers.SetMLeaderStyle),
+
             // layers
             Route.Main("create_layer", LayerHandlers.CreateLayer),
             Route.Main("set_layer_state", LayerHandlers.SetLayerState),

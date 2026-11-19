@@ -930,6 +930,30 @@
             "default": null,
             "description": "Table style name (list_styles). Default: the current style."
           },
+          "text_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style for all cells (override of the table style)."
+          },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height for all cells (override); rows grow to fit. Better: a table style with the right heights (set_table_style)."
+          },
           "layer": {
             "anyOf": [
               {
@@ -2299,7 +2323,7 @@
     },
     {
       "name": "set_entity_properties",
-      "description": "Change layer, color, linetype, lineweight, linetype scale, transparency or visibility of objects.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.\n\nDynamic blocks: dynamic_properties changes parameters of block references already in the drawing\n(e.g. {\"Distance1\": 3000, \"Visibility1\": \"Open\"}); the handle, attributes and XData stay. Names and\nallowed values: get_entity_properties of the reference. All targets must be dynamic block references.",
+      "description": "Change layer, color, linetype, lineweight, linetype scale, transparency, visibility or style of objects.\n\nObjects are chosen by handles or by filter. Objects on locked layers make the whole call fail\n(nothing changes); unlock the layer first. One call = one step for the undo tool.\n\nDynamic blocks: dynamic_properties changes parameters of block references already in the drawing\n(e.g. {\"Distance1\": 3000, \"Visibility1\": \"Open\"}); the handle, attributes and XData stay. Names and\nallowed values: get_entity_properties of the reference. All targets must be dynamic block references.",
       "inputSchema": {
         "properties": {
           "handles": {
@@ -2421,6 +2445,18 @@
               }
             ],
             "default": null
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Style by object type: texts/mtexts -> text style, dimensions -> dimension style (their overrides are dropped), tables -> table style (cell text style/height overrides dropped), multileaders -> multileader style."
           },
           "dynamic_properties": {
             "anyOf": [
@@ -2728,6 +2764,461 @@
         "required": [
           "name",
           "value"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_text_style",
+      "description": "Create or change a text style: font (TrueType family like \"ISOCPEUR\" / \"Arial\", or an SHX file like\n\"txt.shx\", \"gost.shx\"), height, width factor, obliquing, current. Texts, dimensions, tables and\nmultileaders that use the style change with it. Returns the style. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Style name. Created if it does not exist, otherwise changed.",
+            "type": "string"
+          },
+          "font": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "TrueType family name or .ttf file, or an .shx file name. Required for a new style."
+          },
+          "bold": {
+            "default": false,
+            "description": "TrueType only: bold.",
+            "type": "boolean"
+          },
+          "italic": {
+            "default": false,
+            "description": "TrueType only: italic.",
+            "type": "boolean"
+          },
+          "big_font": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "SHX big font file (Asian languages), e.g. bigfont.shx."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Fixed text height; 0 = height is set per text (usual for annotation styles)."
+          },
+          "width_factor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Width factor, e.g. 0.8 (> 0)."
+          },
+          "oblique_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Obliquing angle in degrees, -85 to 85."
+          },
+          "current": {
+            "default": false,
+            "description": "Make it the current style for new objects.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_dim_style",
+      "description": "Create or change a dimension style: text style and height, arrows, extension lines, text gap and\nposition, decimals, overall scale, fit. Dimensions using the style change with it (except their own\noverrides - see modify_dimension). A new style copies based_on, or the current style with the current\nDIM* overrides. current: true also clears the current DIM* overrides. Returns the style. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Style name. Created if it does not exist, otherwise changed.",
+            "type": "string"
+          },
+          "based_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New style only: copy this dimension style (default: the current style with its overrides)."
+          },
+          "text_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style name (create it with set_text_style)."
+          },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMTXT, before dim_scale."
+          },
+          "arrow": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "closed_filled, _ARCHTICK, _OBLIQUE, _DOT, _OPEN, _NONE, … or a block name."
+          },
+          "arrow_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMASZ, before dim_scale."
+          },
+          "ext_offset": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMEXO: gap between the object and the extension line."
+          },
+          "ext_extend": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMEXE: extension line beyond the dimension line."
+          },
+          "text_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMGAP: gap around the text."
+          },
+          "text_vertical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMTAD: centered, above, outside, jis or below."
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMDEC: decimal places, 0-8."
+          },
+          "dim_scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "DIMSCALE: overall scale (e.g. 100 for 1:100 in model space)."
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "best",
+                  "arrows",
+                  "text",
+                  "both_outside",
+                  "text_inside"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "best, arrows, text, both_outside or text_inside (see create_dimension)."
+          },
+          "current": {
+            "default": false,
+            "description": "Make it the current style for new objects.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_table_style",
+      "description": "Create or change a table style: text style and text height of title / header / data rows, cell margins.\nTables using the style change with it, except cells with their own text style/height (set_entity_properties\nwith style drops those). Returns the style. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Style name. Created if it does not exist, otherwise changed.",
+            "type": "string"
+          },
+          "based_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New style only: copy the settings of this table style first (default: Standard)."
+          },
+          "text_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style for all rows."
+          },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height: one number for all rows, or {\"title\": 350, \"header\": 250, \"data\": 250}."
+          },
+          "horizontal_margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Horizontal cell margin."
+          },
+          "vertical_margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Vertical cell margin."
+          },
+          "current": {
+            "default": false,
+            "description": "Make it the current style for new objects.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_mleader_style",
+      "description": "Create or change a multileader style: text style and height, arrowhead and size, landing gap, dogleg.\nReturns the style. One undo step.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Style name. Created if it does not exist, otherwise changed.",
+            "type": "string"
+          },
+          "based_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New style only: copy the settings of this multileader style first (default: Standard)."
+          },
+          "text_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text style name."
+          },
+          "text_height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Text height."
+          },
+          "arrow": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "closed_filled, _DOT, _ARCHTICK, _OPEN, _NONE, … or a block name."
+          },
+          "arrow_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Arrowhead size."
+          },
+          "landing_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Gap between the landing line and the text."
+          },
+          "dogleg_length": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Length of the horizontal landing; 0 = no landing."
+          },
+          "current": {
+            "default": false,
+            "description": "Make it the current style for new objects.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       }

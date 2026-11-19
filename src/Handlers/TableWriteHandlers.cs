@@ -296,6 +296,9 @@ internal static class TableWriteHandlers
             t.Position = pos;
             t.SetSize(nRows, nCols);
             Props.ApplyCommon(ctx, t, a);
+            ObjectId? textStyle = Args.Str(a, "text_style") is string tsn ? StyleHandlers.TextStyleId(ctx, tsn) : null;
+            double? textHeight = Args.Num(a, "text_height");
+            if (textHeight is <= 0) throw new BridgeException("bad_request", "'text_height' must be > 0");
 
             double? rowHeight = Args.Num(a, "row_height");
             for (int r = 0; r < nRows; r++)
@@ -326,6 +329,9 @@ internal static class TableWriteHandlers
                 var row = (JsonArray)data[i]!;
                 for (int c = 0; c < row.Count; c++) WriteCell(t.Cells[titleRows + i, c], row[c]?.DeepClone());
             }
+            // Overrides for the whole table; row heights grow with the text in GenerateLayout.
+            if (textStyle is ObjectId tsId) t.Cells.TextStyleId = tsId;
+            if (textHeight is double th) t.Cells.TextHeight = th;
             t.SuppressRegenerateTable(false);
             t.GenerateLayout();
             ctx.Add(ctx.CurrentSpace(), t);

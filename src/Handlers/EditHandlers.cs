@@ -59,9 +59,10 @@ internal static class EditHandlers
     {
         var dynamic = Args.Obj(a, "dynamic_properties") is { Count: > 0 } dp ? dp : null;
         bool any = a["layer"] != null || a["color"] != null || a["linetype"] != null || a["lineweight"] != null
-                   || a["linetype_scale"] != null || a["transparency"] != null || a["visible"] != null || dynamic != null;
+                   || a["linetype_scale"] != null || a["transparency"] != null || a["visible"] != null || dynamic != null
+                   || a["style"] != null;
         if (!any) throw new BridgeException("bad_request",
-            "nothing to change: pass layer, color, linetype, lineweight, linetype_scale, transparency, visible or dynamic_properties");
+            "nothing to change: pass layer, color, linetype, lineweight, linetype_scale, transparency, visible, style or dynamic_properties");
         var targets = Targets.Prepare(a, "set_entity_properties");
         if (targets.Preview != null) return targets.Preview;
 
@@ -89,6 +90,7 @@ internal static class EditHandlers
                         $"(e.g. {string.Join(", ", wrong.Take(10))}); nothing was changed");
             }
             var dynamicResults = new JsonArray();
+            var styleSetter = Args.Str(a, "style") is string styleName ? StyleSetter(ctx, targets.Ids, styleName) : null;
 
             foreach (var id in targets.Ids)
             {
@@ -112,11 +114,83 @@ internal static class EditHandlers
                 if (ltScale is double s) e.LinetypeScale = s;
                 if (transparency is { } t) e.Transparency = t;
                 if (visible is bool v) e.Visible = v;
+                styleSetter?.Invoke(e);
             }
             var result = new JsonObject { ["changed"] = targets.Ids.Count };
             if (dynamic != null) result["dynamic_blocks"] = dynamicResults;
             return result;
         });
+    }
+
+    /// <summary>
+    /// "style" of set_entity_properties: the style kind follows the object type - TEXT/MTEXT text style,
+    /// DIMENSION dimension style (its overrides are dropped), ACAD_TABLE table style (cell-level text style
+    /// and height overrides are dropped), MULTILEADER multileader style. Checked for all targets first.
+    /// </summary>
+    private static Action<Entity> StyleSetter(Write.Ctx ctx, List<ObjectId> ids, string name)
+    {
+        var tr = ctx.Tr;
+        ObjectId Lookup(string kind, Func<bool> has, Func<ObjectId> get) =>
+            has() ? get() : throw new BridgeException("not_found", $"{kind} style '{name}' does not exist (see list_styles)", 404);
+
+        ObjectId? text = null, dim = null, table = null, mleader = null;
+        var unsupported = new List<string>();
+        foreach (var id in ids)
+        {
+            switch (tr.GetObject(id, OpenMode.ForRead))
+            {
+                case DBText or MText:
+                    var tt = (TextStyleTable)tr.GetObject(ctx.Db.TextStyleTableId, OpenMode.ForRead);
+                    text ??= Lookup("text", () => tt.Has(name), () => tt[name]);
+                    break;
+                case Dimension:
+                    var dt = (DimStyleTable)tr.GetObject(ctx.Db.DimStyleTableId, OpenMode.ForRead);
+                    dim ??= Lookup("dimension", () => dt.Has(name), () => dt[name]);
+                    break;
+                case Table:
+                    var td = (DBDictionary)tr.GetObject(ctx.Db.TableStyleDictionaryId, OpenMode.ForRead);
+                    table ??= Lookup("table", () => td.Contains(name), () => td.GetAt(name));
+                    break;
+                case MLeader:
+                    var md = (DBDictionary)tr.GetObject(ctx.Db.MLeaderStyleDictionaryId, OpenMode.ForRead);
+                    mleader ??= Lookup("multileader", () => md.Contains(name), () => md.GetAt(name));
+                    break;
+                default:
+                    unsupported.Add(id.Handle.ToString());
+                    break;
+            }
+        }
+        if (unsupported.Count > 0)
+            throw new BridgeException("bad_request",
+                $"'style' applies to texts, dimensions, tables and multileaders; {unsupported.Count} objects are none of these " +
+                $"(e.g. {string.Join(", ", unsupported.Take(10))}); nothing was changed");
+
+        return e =>
+        {
+            switch (e)
+            {
+                case DBText t: t.TextStyleId = text!.Value; break;
+                case MText m: m.TextStyleId = text!.Value; break;
+                case Dimension d:
+                    d.DimensionStyle = dim!.Value;
+                    d.SetDimstyleData((DimStyleTableRecord)tr.GetObject(dim.Value, OpenMode.ForRead));
+                    d.RecomputeDimensionBlock(true);
+                    break;
+                case Table t:
+                    t.TableStyle = table!.Value;
+                    // Drop only the cells' own text style / height, other cell formatting stays.
+                    for (int r = 0; r < t.Rows.Count; r++)
+                        for (int c = 0; c < t.Columns.Count; c++)
+                        {
+                            var o = t.GetOverrides(r, c, 0);
+                            var keep = o & ~(CellProperties.TextStyle | CellProperties.TextHeight);
+                            if (keep != o) t.SetOverrides(r, c, 0, keep);
+                        }
+                    t.GenerateLayout();
+                    break;
+                case MLeader ml: ml.MLeaderStyle = mleader!.Value; break;
+            }
+        };
     }
 
     // ---------------------------------------------------------------- transform

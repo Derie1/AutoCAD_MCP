@@ -102,8 +102,7 @@ internal static class DimensionHandlers
         }
         if (Args.Str(a, "fit") is string fit)
         {
-            if (!Fits.TryGetValue(fit, out var f))
-                throw new BridgeException("bad_request", $"'fit' must be one of {string.Join(", ", Fits.Keys)}");
+            var f = Fit(fit);
             d.Dimatfit = f.AtFit;
             d.Dimtix = f.Tix;
         }
@@ -115,11 +114,17 @@ internal static class DimensionHandlers
         }
     }
 
+    internal static (int AtFit, bool Tix) Fit(string fit) =>
+        Fits.TryGetValue(fit, out var f) ? f : throw new BridgeException("bad_request", $"'fit' must be one of {string.Join(", ", Fits.Keys)}");
+
+    internal static string? FitName(int atFit, bool tix) =>
+        tix ? "text_inside" : Fits.FirstOrDefault(kv => kv.Value.AtFit == atFit && !kv.Value.Tix).Key;
+
     /// <summary>
     /// Arrowhead block by AutoCAD name ("_ARCHTICK", "_OBLIQUE", "_DOT", "_NONE"…; "" or "closed_filled" = default).
     /// Predefined arrow blocks are created on first use by setting DIMBLK; the user's DIMBLK is restored.
     /// </summary>
-    private static ObjectId ArrowBlock(Write.Ctx ctx, string name)
+    internal static ObjectId ArrowBlock(Write.Ctx ctx, string name)
     {
         name = name.Trim();
         if (name.Length == 0 || name.Equals("closed_filled", StringComparison.OrdinalIgnoreCase) || name == ".")
@@ -169,7 +174,7 @@ internal static class DimensionHandlers
         o["decimals"] = d.Dimdec;
         try { o["text_style"] = ((TextStyleTableRecord)tr.GetObject(d.TextStyleId, OpenMode.ForRead)).Name; } catch { }
         o["arrow"] = d.Dimblk.IsNull ? "closed_filled" : ((BlockTableRecord)tr.GetObject(d.Dimblk, OpenMode.ForRead)).Name;
-        o["fit"] = d.Dimtix ? "text_inside" : Fits.FirstOrDefault(kv => kv.Value.AtFit == d.Dimatfit && !kv.Value.Tix).Key;
+        o["fit"] = FitName(d.Dimatfit, d.Dimtix);
         o["text_position"] = JsonUtil.Point(d.TextPosition);
         o["text_moved"] = !d.UsingDefaultTextPosition;
     }
