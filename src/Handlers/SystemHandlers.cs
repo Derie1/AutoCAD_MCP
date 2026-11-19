@@ -26,6 +26,8 @@ internal static class SystemHandlers
             ["port"] = s?.Port,
             ["routes"] = s?.RouteCount,
             ["ribbon"] = RibbonUi.State,
+            ["commands_allowed"] = CommandAccess.Allowed,
+            ["commands_source"] = CommandAccess.Source,
             ["requests"] = s?.RequestCount,
         };
     }

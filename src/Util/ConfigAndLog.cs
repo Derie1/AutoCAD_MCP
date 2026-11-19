@@ -4,8 +4,9 @@ namespace AcadMcpBridge;
 
 /// <summary>
 /// Settings from %LOCALAPPDATA%\AcadMcpBridge\config.json (optional):
-///   { "port": 8766, "token": "", "requestTimeoutSeconds": 30 }
-/// The Python server must use the same port (ACAD_MCP_PORT) and token (ACAD_MCP_TOKEN).
+///   { "port": 8766, "token": "", "requestTimeoutSeconds": 30, "allowCommands": false }
+/// The MCP server must use the same port (ACAD_MCP_PORT) and token (ACAD_MCP_TOKEN).
+/// allowCommands: true allows run_command / eval_lisp from the start, without the ribbon toggle.
 /// </summary>
 internal sealed class BridgeConfig
 {
@@ -18,6 +19,7 @@ internal sealed class BridgeConfig
     public int Port { get; private init; } = DefaultPort;
     public string Token { get; private init; } = "";
     public int RequestTimeoutSeconds { get; private init; } = 30;
+    public bool AllowCommands { get; private init; }
 
     public static BridgeConfig Load()
     {
@@ -30,6 +32,7 @@ internal sealed class BridgeConfig
                 Port = o["port"]?.GetValue<int>() ?? DefaultPort,
                 Token = o["token"]?.GetValue<string>() ?? "",
                 RequestTimeoutSeconds = Math.Clamp(o["requestTimeoutSeconds"]?.GetValue<int>() ?? 30, 1, 3600),
+                AllowCommands = o["allowCommands"]?.GetValue<bool>() ?? false,
             };
         }
         catch (Exception ex)

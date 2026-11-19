@@ -14,7 +14,7 @@ namespace AcadMcpBridge;
 /// </summary>
 public sealed class BridgeApp : IExtensionApplication
 {
-    public const string PluginVersion = "0.5.0";
+    public const string PluginVersion = "0.5.1";
 
     internal static BridgeServer? Server { get; private set; }
 
@@ -25,6 +25,7 @@ public sealed class BridgeApp : IExtensionApplication
     {
         MainThread.Init();
         UndoTracker.Init();
+        CommandAccess.Init();
         RibbonUi.Init();
         Host = HostInfo.Capture();
         Log.Info($"Loaded {PluginVersion} ({BuildInfo.Series}) in {Host.Product} {Host.AcadVer}, .NET {Environment.Version}");
@@ -55,9 +56,10 @@ public sealed class BridgeApp : IExtensionApplication
     }
 
     internal static string Status() =>
-        Server is { IsListening: true } s
+        (Server is { IsListening: true } s
             ? $"listening on {s.Prefix}, {s.RouteCount} routes, {s.RequestCount} requests served"
-            : "not running (type MCPSTART)";
+            : "not running (type MCPSTART)")
+        + $"; commands and AutoLISP: {CommandAccess.Describe()}";
 }
 
 internal sealed record HostInfo(string Product, string AcadVer, string VerNum, string AppVersion)
@@ -92,6 +94,16 @@ public sealed class BridgeCommands
 
     [CommandMethod("MCPSTATUS", CommandFlags.Session)]
     public void McpStatus() => Run(BridgeApp.Status);
+
+    /// <summary>Allows (after a warning) or turns off run_command / eval_lisp for this session.</summary>
+    [CommandMethod("MCPCOMMANDS", CommandFlags.Session)]
+    public void McpCommands() => Run(() =>
+    {
+        CommandAccess.Toggle();
+        return CommandAccess.Allowed
+            ? "commands and AutoLISP are allowed for this session (MCPCOMMANDS again turns them off)"
+            : "commands and AutoLISP are off";
+    });
 
     private static void Run(Func<string> action)
     {

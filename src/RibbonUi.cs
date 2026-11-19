@@ -86,6 +86,8 @@ internal static class RibbonUi
                 "Stop the MCP bridge: Claude loses access to AutoCAD."));
             source.Items.Add(Button("MCPSTATUS", "Status", "McpStatus",
                 "Show whether the MCP bridge is running, its port and how many requests it served."));
+            source.Items.Add(new RibbonSeparator());
+            source.Items.Add(CommandsToggle());
             tab.Panels.Add(new RibbonPanel { Source = source });
             State = tab == home ? "Home tab" : "own AI companion tab";
             Log.Info($"ribbon panel added ({State})");
@@ -95,6 +97,63 @@ internal static class RibbonUi
             State = "error: " + ex.Message;
             Log.Error("cannot add the ribbon panel", ex);
         }
+    }
+
+    private static RibbonToggleButton? _toggle;
+    private static bool _toggleWatched;
+
+    /// <summary>
+    /// "Commands" toggle: lit while run_command / eval_lisp are allowed. Turning it on shows the
+    /// warning first (CommandAccess.Toggle); the button always follows the real state.
+    /// </summary>
+    private static RibbonToggleButton CommandsToggle()
+    {
+        bool ru = CommandAccess.Russian;
+        _toggle = new RibbonToggleButton
+        {
+            Id = "ACADMCP_MCPCOMMANDS",
+            Text = "Commands",
+            ShowText = true,
+            ShowImage = true,
+            Size = RibbonItemSize.Large,
+            Orientation = System.Windows.Controls.Orientation.Vertical,
+            LargeImage = Image("McpCommands_32.png"),
+            Image = Image("McpCommands_16.png"),
+            IsChecked = CommandAccess.Allowed,
+            CommandHandler = new ToggleCommands(),
+            ToolTip = new RibbonToolTip
+            {
+                Title = ru ? "Команды AutoCAD и AutoLISP для ИИ" : "AutoCAD commands and AutoLISP for AI",
+                Content = ru
+                    ? "Разрешить или запретить ассистенту выполнять любые команды AutoCAD и выражения AutoLISP " +
+                      "(run_command, eval_lisp) в этом сеансе. Перед разрешением показывается предупреждение. Подсвечена — разрешено."
+                    : "Allow or forbid the assistant to run any AutoCAD command and AutoLISP expression " +
+                      "(run_command, eval_lisp) in this session. A warning is shown before allowing. Lit: allowed.",
+                Command = "MCPCOMMANDS",
+            },
+        };
+        if (!_toggleWatched)
+        {
+            _toggleWatched = true;
+            CommandAccess.Changed += SyncToggle;
+        }
+        return _toggle;
+    }
+
+    private static void SyncToggle()
+    {
+        if (_toggle == null) return;
+        _toggle.IsChecked = CommandAccess.Allowed;
+        // The button flips itself after the click handler: set the real state again once idle.
+        void Once(object? s, EventArgs e) { AcApp.Idle -= Once; if (_toggle != null) _toggle.IsChecked = CommandAccess.Allowed; }
+        AcApp.Idle += Once;
+    }
+
+    private sealed class ToggleCommands : ICommand
+    {
+        public event EventHandler? CanExecuteChanged { add { } remove { } }
+        public bool CanExecute(object? parameter) => true;
+        public void Execute(object? parameter) => CommandAccess.Toggle();
     }
 
     private static RibbonButton Button(string command, string text, string icon, string description) => new()

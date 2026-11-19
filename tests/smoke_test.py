@@ -55,6 +55,10 @@ def test_http(base: str) -> None:
     status, h = http(base, "GET", "health")
     check("health ok", status == 200 and h.get("ok") is True, str(h))
     check("health product=AutoCAD", h.get("product") == "AutoCAD", str(h))
+    check("health reports whether commands are allowed",
+          isinstance(h.get("commands_allowed"), bool)
+          and h.get("commands_source") in ("off", "config", "environment", "session")
+          and h.get("commands_allowed") == (h.get("commands_source") != "off"), str(h))
     check("ribbon panel on the Home tab", h.get("ribbon") == "Home tab", str(h.get("ribbon")))
     print(f"    {h.get('host_product')} {h.get('acad_build')}, build {h.get('build_series')}, "
           f".NET {h.get('dotnet')}, {h.get('routes')} routes")

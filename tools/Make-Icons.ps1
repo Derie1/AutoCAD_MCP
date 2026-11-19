@@ -3,6 +3,7 @@
     McpStart_16/32.png   green circle, white "play" triangle
     McpStop_16/32.png    red circle, white square
     McpStatus_16/32.png  blue circle, white "i"
+    McpCommands_16/32.png amber circle, white command prompt ">_" (toggle: commands and AutoLISP)
   Re-run after changing colours or shapes; replace the PNGs with your own if you like
   (same names and sizes: 16x16 and 32x32, transparent background).
 #>
@@ -50,9 +51,24 @@ $info = {
     $g.FillRectangle($white, $x, $s * 0.42, $w, $s * 0.36)                 # stem
 }
 
+$prompt = {
+    param($g, $s)
+    $w = [Math]::Max(1.6, $s * 0.11)
+    $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), $w
+    $pen.StartCap = 'Round'; $pen.EndCap = 'Round'; $pen.LineJoin = 'Round'
+    $pts = [System.Drawing.PointF[]]@(
+        (New-Object System.Drawing.PointF ($s * 0.27), ($s * 0.33)),
+        (New-Object System.Drawing.PointF ($s * 0.45), ($s * 0.50)),
+        (New-Object System.Drawing.PointF ($s * 0.27), ($s * 0.67)))
+    $g.DrawLines($pen, $pts)                                                   # >
+    $g.DrawLine($pen, ($s * 0.53), ($s * 0.69), ($s * 0.74), ($s * 0.69))    # _
+    $pen.Dispose()
+}
+
 foreach ($size in 16, 32) {
     New-Icon 'McpStart'  $size ([System.Drawing.Color]::FromArgb(46, 158, 72))  $play
     New-Icon 'McpStop'   $size ([System.Drawing.Color]::FromArgb(201, 53, 43))  $square
     New-Icon 'McpStatus' $size ([System.Drawing.Color]::FromArgb(31, 111, 197)) $info
+    New-Icon 'McpCommands' $size ([System.Drawing.Color]::FromArgb(222, 132, 20)) $prompt
 }
 Get-ChildItem $out -Filter *.png | Select-Object Name, Length
