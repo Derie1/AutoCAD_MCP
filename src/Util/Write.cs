@@ -166,6 +166,10 @@ internal static class UndoTracker
 
     public static void BeginOwnUndo() => _ownUndoRunning = true;
 
+    /// <summary>run_command: the commands it runs are MCP's, not the user's (paired with EndOwnCommands).</summary>
+    public static void BeginOwnCommands() => _ownUndoRunning = true;
+    public static void EndOwnCommands() => _ownUndoRunning = false;
+
     /// <summary>Runs an MCP operation that AutoCAD reports as a command (e.g. COM AuditInfo) without
     /// mistaking it for the user's own command.</summary>
     public static void AsOwnCommand(Action a)

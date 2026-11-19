@@ -4135,6 +4135,50 @@
         ],
         "type": "object"
       }
+    },
+    {
+      "name": "run_command",
+      "description": "Run an AutoCAD command in the active drawing with its answers, as if typed on the command line.\nOnly when the user has allowed commands in AutoCAD (otherwise: commands_disabled; tell the user how to\nallow them). Prefer the dedicated tools; use this for what they cannot do.\n\ncommand: one command name, e.g. '_.FILLET' or '-LAYER' (prefer the command-line versions with '-' and\nthe '_' prefix for English names). inputs: the answers to its prompts in order — strings and option\nkeywords ('_R'), numbers, points [x, y] / [x, y, z], and '' for Enter. Example: command '_.LINE',\ninputs [[0,0], [100,0], [100,50], ''].\n\nThe whole call is one undo step. If the command still waits for input when the answers run out, it is\ncancelled (completed: false, last_prompt tells what it asked) — call again with the full answers.\nDialogs are suppressed (FILEDIA/CMDDIA = 0) during the call; a command that still opens a dialog blocks\nAutoCAD until the user closes it. QUIT, EXIT, CLOSE, CLOSEALL, SHELL, NETLOAD, APPLOAD, ARX, VBALOAD,\nVBARUN are refused. Returns completed, error, last_prompt and command_line (the command's echo).",
+      "inputSchema": {
+        "properties": {
+          "command": {
+            "description": "One command name, e.g. '_.LINE', '-LAYER', '_.FILLET'.",
+            "type": "string"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Answers to the command's prompts in order: strings, numbers, points [x, y], '' for Enter."
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      }
     }
   ]
 }

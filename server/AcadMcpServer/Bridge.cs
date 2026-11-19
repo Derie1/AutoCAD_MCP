@@ -14,6 +14,7 @@ internal sealed class Bridge
     private static readonly Dictionary<string, double> LongRoutes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["plot_to_pdf"] = 900,
+        ["run_command"] = 330,
     };
 
     private readonly HttpClient _http;

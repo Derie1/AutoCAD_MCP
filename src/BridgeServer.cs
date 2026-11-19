@@ -138,17 +138,20 @@ internal sealed class Route
     private readonly Func<JsonObject, JsonObject>? _sync;
     private readonly Func<JsonObject, Task<JsonObject>>? _async;
     private readonly bool _onMainThread;
+    private readonly int _minTimeoutSeconds;
 
-    private Route(string name, bool onMainThread, Func<JsonObject, JsonObject>? sync, Func<JsonObject, Task<JsonObject>>? async)
+    private Route(string name, bool onMainThread, Func<JsonObject, JsonObject>? sync, Func<JsonObject, Task<JsonObject>>? async,
+                  int minTimeoutSeconds = 0)
     {
-        Name = name; _onMainThread = onMainThread; _sync = sync; _async = async;
+        Name = name; _onMainThread = onMainThread; _sync = sync; _async = async; _minTimeoutSeconds = minTimeoutSeconds;
     }
 
     public string Name { get; }
 
     public static Route Http(string name, Func<JsonObject, JsonObject> run) => new(name, false, run, null);
     public static Route Main(string name, Func<JsonObject, JsonObject> run) => new(name, true, run, null);
-    public static Route Async(string name, Func<JsonObject, Task<JsonObject>> run) => new(name, true, null, run);
+    public static Route Async(string name, Func<JsonObject, Task<JsonObject>> run, int minTimeoutSeconds = 0) =>
+        new(name, true, null, run, minTimeoutSeconds);
 
     public async Task<JsonObject> Invoke(JsonObject args, TimeSpan timeout)
     {
@@ -156,9 +159,10 @@ internal sealed class Route
         if (_sync != null) return await MainThread.InvokeAsync(() => _sync(args), timeout).ConfigureAwait(false);
 
         Task<JsonObject> started = await MainThread.InvokeAsync(() => _async!(args), timeout).ConfigureAwait(false);
-        var finished = await Task.WhenAny(started, Task.Delay(timeout)).ConfigureAwait(false);
+        var wait = TimeSpan.FromSeconds(Math.Max(timeout.TotalSeconds, _minTimeoutSeconds));
+        var finished = await Task.WhenAny(started, Task.Delay(wait)).ConfigureAwait(false);
         if (finished != started)
-            throw new BridgeException("timeout", $"AutoCAD did not finish '{Name}' within {timeout.TotalSeconds:0} s");
+            throw new BridgeException("timeout", $"AutoCAD did not finish '{Name}' within {wait.TotalSeconds:0} s");
         return await started.ConfigureAwait(false);
     }
 }

@@ -33,6 +33,9 @@ internal static class Routes
             Route.Main("audit", MaintenanceHandlers.Audit),
             Route.Main("import_from_drawing", ImportHandlers.ImportFromDrawing),
 
+            // commands and AutoLISP (only when the user allowed them)
+            Route.Async("run_command", CommandHandlers.RunCommand, minTimeoutSeconds: 300),
+
             Route.Main("list_layers", CatalogHandlers.ListLayers),
             Route.Main("list_blocks", CatalogHandlers.ListBlocks),
             Route.Main("list_layouts", CatalogHandlers.ListLayouts),
