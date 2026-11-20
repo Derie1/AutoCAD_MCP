@@ -90,13 +90,7 @@ internal sealed class BridgeServer
         }
         catch (Exception ex)
         {
-            var (code, message, httpStatus) = ex switch
-            {
-                BridgeException b => (b.Code, b.Message, b.HttpStatus),
-                Autodesk.AutoCAD.Runtime.Exception a => ("autocad_error", $"{a.ErrorStatus}: {a.Message}", 500),
-                JsonException j => ("bad_request", "invalid JSON: " + j.Message, 400),
-                _ => ("internal_error", ex.GetType().Name + ": " + ex.Message, 500),
-            };
+            var (code, message, httpStatus) = ErrorOf(ex);
             if (httpStatus >= 500) Log.Error($"{name} failed", ex);
             status = httpStatus;
             result = new JsonObject { ["ok"] = false, ["code"] = code, ["error"] = message };
@@ -113,6 +107,15 @@ internal sealed class BridgeServer
         }
         catch (Exception ex) { Log.Error("cannot write response", ex); }
     }
+
+    /// <summary>Error code, message and HTTP status for a failed tool (also used by the batch mode).</summary>
+    internal static (string Code, string Message, int HttpStatus) ErrorOf(Exception ex) => ex switch
+    {
+        BridgeException b => (b.Code, b.Message, b.HttpStatus),
+        Autodesk.AutoCAD.Runtime.Exception a => ("autocad_error", $"{a.ErrorStatus}: {a.Message}", 500),
+        JsonException j => ("bad_request", "invalid JSON: " + j.Message, 400),
+        _ => ("internal_error", ex.GetType().Name + ": " + ex.Message, 500),
+    };
 
     private static async Task<JsonObject> ReadArgs(HttpListenerRequest req)
     {
@@ -147,6 +150,13 @@ internal sealed class Route
     }
 
     public string Name { get; }
+
+    /// <summary>Runs synchronously (Http or Main): the batch mode can call it directly on the main thread.</summary>
+    public bool IsSync => _sync != null;
+
+    /// <summary>Batch mode: runs a synchronous handler on the calling (main) thread.</summary>
+    public JsonObject RunHere(JsonObject args) =>
+        _sync?.Invoke(args) ?? throw new BridgeException("not_in_batch", $"'{Name}' cannot run in a batch");
 
     public static Route Http(string name, Func<JsonObject, JsonObject> run) => new(name, false, run, null);
     public static Route Main(string name, Func<JsonObject, JsonObject> run) => new(name, true, run, null);

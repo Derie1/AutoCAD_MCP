@@ -22,7 +22,7 @@ internal static class CommandHandlers
     {
         CommandAccess.Require("run_command");
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
 
         string command = (Args.Str(a, "command", required: true) ?? "").Trim();

@@ -30,7 +30,7 @@ internal static class LispHandlers
     {
         CommandAccess.Require("eval_lisp");
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
         string expr = (Args.Str(a, "expression", required: true) ?? "").Trim();
         if (expr.Length == 0) throw new BridgeException("bad_request", "'expression' must not be empty");

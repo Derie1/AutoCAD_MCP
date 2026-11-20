@@ -31,4 +31,9 @@ internal static class JsonUtil
     public static Document ActiveDocument() =>
         AcApp.DocumentManager.MdiActiveDocument
         ?? throw new BridgeException("no_document", "no drawing is open in AutoCAD");
+
+    /// <summary>A command is running in the drawing (in a batch, MCPBATCH itself does not count).</summary>
+    public static bool Busy(Document doc) =>
+        !string.IsNullOrEmpty(doc.CommandInProgress)
+        && !(Batch.IsConsole && doc.CommandInProgress.Equals("MCPBATCH", StringComparison.OrdinalIgnoreCase));
 }

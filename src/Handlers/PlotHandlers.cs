@@ -23,7 +23,7 @@ internal static class PlotHandlers
     public static JsonObject PlotToPdf(JsonObject a)
     {
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
         if (PlotFactory.ProcessPlotState != ProcessPlotState.NotPlotting)
             throw new BridgeException("busy", "AutoCAD is already plotting; wait until it finishes", 409);

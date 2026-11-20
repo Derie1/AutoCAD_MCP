@@ -24,7 +24,8 @@ internal static class CommandAccess
 
     public static void Init()
     {
-        if (Environment.GetEnvironmentVariable(EnvVar) == "1") Set(true, "environment");
+        // A batch (AcCoreConsole) may use commands only when config.json allows them.
+        if (!Batch.IsConsole && Environment.GetEnvironmentVariable(EnvVar) == "1") Set(true, "environment");
         else
         {
             try { if (BridgeConfig.Load().AllowCommands) Set(true, "config"); }

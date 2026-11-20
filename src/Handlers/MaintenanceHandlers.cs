@@ -139,8 +139,38 @@ internal static class MaintenanceHandlers
     /// </summary>
     public static JsonObject Audit(JsonObject a)
     {
+        var s = AuditBegin(a);
+        try
+        {
+            dynamic com = s.Doc.GetAcadDocument();
+            UndoTracker.AsOwnCommand(() => com.AuditInfo(s.Fix));
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            throw new BridgeException("autocad_error", $"AUDIT failed: {ex.Message}", 500);
+        }
+        finally { AuditRestore(s); }
+        return AuditReport(s);
+    }
+
+    /// <summary>
+    /// Batch mode (AcCoreConsole has no COM): the AUDIT command inside MCPBATCH. Only the asynchronous
+    /// Editor.CommandAsync works there; the synchronous Editor.Command crashes the console.
+    /// </summary>
+    public static async Task<JsonObject> AuditInBatch(JsonObject a)
+    {
+        var s = AuditBegin(a);
+        try { await s.Doc.Editor.CommandAsync("_.AUDIT", s.Fix ? "_Y" : "_N"); }
+        finally { AuditRestore(s); }
+        return AuditReport(s);
+    }
+
+    private sealed record AuditState(Document Doc, bool Fix, string? Adt, bool Existed, DateTime Before, object OldCtl);
+
+    private static AuditState AuditBegin(JsonObject a)
+    {
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
         bool fix = Args.Bool(a, "fix");
         if (fix && doc.IsReadOnly) throw new BridgeException("read_only", "the drawing is open read-only; audit without fix", 409);
@@ -150,25 +180,22 @@ internal static class MaintenanceHandlers
         var before = existed ? File.GetLastWriteTimeUtc(adt!) : DateTime.MinValue;
         object oldCtl = AcApp.GetSystemVariable("AUDITCTL");
         AcApp.SetSystemVariable("AUDITCTL", adt != null ? 1 : 0);
-        try
-        {
-            dynamic com = doc.GetAcadDocument();
-            UndoTracker.AsOwnCommand(() => com.AuditInfo(fix));
-        }
-        catch (System.Runtime.InteropServices.COMException ex)
-        {
-            throw new BridgeException("autocad_error", $"AUDIT failed: {ex.Message}", 500);
-        }
-        finally
-        {
-            AcApp.SetSystemVariable("AUDITCTL", oldCtl);
-            // Measured: AUDIT without fix leaves an empty UNDO group, AUDIT with fix leaves none
-            // (its repairs cannot be undone step by step).
-            if (!fix) UndoTracker.Recorded(doc, false);
-        }
+        return new AuditState(doc, fix, adt, existed, before, oldCtl);
+    }
 
-        var o = new JsonObject { ["fixed_requested"] = fix };
-        if (adt != null && File.Exists(adt) && File.GetLastWriteTimeUtc(adt) >= before)
+    private static void AuditRestore(AuditState s)
+    {
+        AcApp.SetSystemVariable("AUDITCTL", s.OldCtl);
+        // Measured: AUDIT without fix leaves an empty UNDO group, AUDIT with fix leaves none
+        // (its repairs cannot be undone step by step).
+        if (!s.Fix) UndoTracker.Recorded(s.Doc, false);
+    }
+
+    private static JsonObject AuditReport(AuditState s)
+    {
+        string? adt = s.Adt;
+        var o = new JsonObject { ["fixed_requested"] = s.Fix };
+        if (adt != null && File.Exists(adt) && File.GetLastWriteTimeUtc(adt) >= s.Before)
         {
             string text = File.ReadAllText(adt);
             // "Total errors found 0 fixed 0"
@@ -184,7 +211,7 @@ internal static class MaintenanceHandlers
             var lines = text.Split('\n').Select(l => l.Split('\r').Select(x => x.Trim()).LastOrDefault(x => x.Length > 0) ?? "").Where(l => l.Length > 0).ToList();
             string compact = string.Join("\n", lines);
             o["report"] = compact.Length > 6000 ? compact[^6000..] : compact;
-            if (!existed) try { File.Delete(adt); } catch { /* leave it */ }
+            if (!s.Existed) try { File.Delete(adt); } catch { /* leave it */ }
         }
         else
         {

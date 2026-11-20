@@ -16,7 +16,7 @@ internal static class EditHandlers
     {
         var doc = JsonUtil.ActiveDocument();
         int steps = Args.Int(a, "steps", 1, 1, 100);
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
 
         int available = UndoTracker.Available(doc);

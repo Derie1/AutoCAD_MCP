@@ -131,7 +131,7 @@ internal static class ViewHandlers
     internal static Document Ready()
     {
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
         return doc;
     }

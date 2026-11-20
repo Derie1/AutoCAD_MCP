@@ -46,6 +46,7 @@ internal sealed class BridgeConfig
 internal static class Log
 {
     private static readonly object Gate = new();
+    private static readonly Mutex CrossProcess = new(false, @"Local\AcadMcpBridgeLog");
     private static string LogPath => Path.Combine(BridgeConfig.Folder, "log.txt");
 
     public static void Info(string message) => Write("INFO", message);
@@ -61,8 +62,29 @@ internal static class Log
                 Directory.CreateDirectory(BridgeConfig.Folder);
                 var fi = new FileInfo(LogPath);
                 if (fi.Exists && fi.Length > 1_000_000)
-                    File.Move(LogPath, LogPath + ".old", overwrite: true);
-                File.AppendAllText(LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {level} {message}{Environment.NewLine}");
+                    try { File.Move(LogPath, LogPath + ".old", overwrite: true); } catch (IOException) { }
+                string tag = Batch.IsConsole ? $" [batch {Environment.ProcessId}]" : "";
+                byte[] line = System.Text.Encoding.UTF8.GetBytes(
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {level}{tag} {message}{Environment.NewLine}");
+                // Batch consoles run in parallel with each other and with AutoCAD: appends from several
+                // processes overwrite each other's lines unless they take turns.
+                bool owned = false;
+                try
+                {
+                    try { owned = CrossProcess.WaitOne(1000); }
+                    catch (AbandonedMutexException) { owned = true; }
+                    for (int attempt = 0; ; attempt++)
+                    {
+                        try
+                        {
+                            using var fs = new FileStream(LogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                            fs.Write(line);
+                            break;
+                        }
+                        catch (IOException) when (attempt < 10) { Thread.Sleep(15); }
+                    }
+                }
+                finally { if (owned) CrossProcess.ReleaseMutex(); }
             }
         }
         catch { /* logging must never break AutoCAD */ }

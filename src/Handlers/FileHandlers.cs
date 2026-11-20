@@ -61,7 +61,7 @@ internal static class FileHandlers
         var doc = Pick(a, required: false) ?? JsonUtil.ActiveDocument();
         bool save = Args.Bool(a, "save"), discard = Args.Bool(a, "discard_changes");
         if (save && discard) throw new BridgeException("bad_request", "use either 'save' or 'discard_changes', not both");
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"'{Name(doc)}' is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
 
         bool modified = Modified(doc);

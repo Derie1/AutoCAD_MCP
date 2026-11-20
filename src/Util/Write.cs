@@ -45,7 +45,7 @@ internal static class Write
     public static JsonObject Run(string tool, Func<Ctx, JsonObject> body)
     {
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
         if (doc.IsReadOnly)
             throw new BridgeException("read_only", "the drawing is open read-only", 409);
@@ -91,7 +91,7 @@ internal static class Write
     public static JsonObject RunLocked(string tool, Func<Document, JsonObject> body)
     {
         var doc = JsonUtil.ActiveDocument();
-        if (!string.IsNullOrEmpty(doc.CommandInProgress))
+        if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
         if (doc.IsReadOnly)
             throw new BridgeException("read_only", "the drawing is open read-only", 409);
@@ -146,7 +146,14 @@ internal static class UndoTracker
     private static List<bool> List(Document d) =>
         Groups.TryGetValue(d, out var l) ? l : Groups[d] = [];
 
-    public static void Recorded(Document d, bool realChange) => List(d).Add(realChange);
+    /// <summary>Real MCP changes since the plugin loaded (the batch mode decides with it whether to save).</summary>
+    public static int RealChanges { get; private set; }
+
+    public static void Recorded(Document d, bool realChange)
+    {
+        List(d).Add(realChange);
+        if (realChange) RealChanges++;
+    }
 
     /// <summary>Real MCP changes that can be undone.</summary>
     public static int Available(Document d) => Groups.TryGetValue(d, out var l) ? l.Count(x => x) : 0;
