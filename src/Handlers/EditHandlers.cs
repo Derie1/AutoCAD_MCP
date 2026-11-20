@@ -36,16 +36,18 @@ internal static class EditHandlers
     {
         UndoTracker.BeginOwnUndo();
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        bool started = false;
         try
         {
-            // Known issue (PLAN section 10): after a COM SendCommand in this AutoCAD session the
-            // request may stay queued until another bridge request arrives.
-            await AcApp.DocumentManager.ExecuteInCommandContextAsync(
-                async _ => await doc.Editor.CommandAsync("_.UNDO", steps.ToString()), null);
+            await CommandContext.Run(doc, async () =>
+            {
+                started = true;
+                await doc.Editor.CommandAsync("_.UNDO", steps.ToString());
+            });
         }
         finally
         {
-            UndoTracker.EndOwnUndo(doc, steps);
+            UndoTracker.EndOwnUndo(doc, started ? steps : 0); // not started: nothing was undone
             if (sw.ElapsedMilliseconds > 5000)
                 Log.Info($"undo {steps} step(s) took {sw.ElapsedMilliseconds} ms");
         }

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import glob
 import os
+import subprocess
 import time
 from typing import Callable
 
@@ -75,6 +76,7 @@ def run(base: str, post: Callable, count: Callable, check: Callable, http: Calla
         check(f"run_command {name} -> {code}", s == code, str(r)[:200])
 
     _lisp(base, post, count, check)
+    _after_com_send_command(base, post, count, check)
 
 
 def _lisp(base: str, post: Callable, count: Callable, check: Callable) -> None:
@@ -125,3 +127,34 @@ def _lisp(base: str, post: Callable, count: Callable, check: Callable) -> None:
         check(f"eval_lisp {name} -> {code}", s == code, str(r)[:200])
     s, r = ev('(strcat "(command " "x") ; (getpoint)')
     check("eval_lisp: command words inside strings and comments are fine", s == 200 and r.get("value") == "(command x", str(r)[:300])
+
+
+def _after_com_send_command(base: str, post: Callable, count: Callable, check: Callable) -> None:
+    """A command sent to a drawing through COM SendCommand (another program) makes AutoCAD stop starting
+    command-context requests in that drawing (PLAN section 10); the bridge re-activates the drawing.
+    Runs in a drawing of its own: re-activation needs a second open drawing."""
+    _, info = post(base, "get_document_info")
+    home = info.get("name")
+    s, d = post(base, "new_document")
+    if s != 200:
+        check("new drawing for the COM SendCommand check", False, str(d)[:200])
+        return
+    ps = ("$a=[Runtime.InteropServices.Marshal]::GetActiveObject('AutoCAD.Application');"
+          "$a.ActiveDocument.SendCommand('_.REGEN ');[void][Runtime.InteropServices.Marshal]::ReleaseComObject($a)")
+    try:
+        sent = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
+        check("COM SendCommand to the new drawing", sent.returncode == 0, sent.stderr[:200])
+        time.sleep(1)
+        post(base, "create_line", start=[0, 0], end=[100, 0])
+        t = time.time()
+        s, u = post(base, "undo")
+        check("undo after COM SendCommand works (no hang)", s == 200 and count(base, types="LINE") == 0
+              and time.time() - t < 10, f"{time.time() - t:.1f}s {u}")
+        s, r = post(base, "run_command", command="_.REGEN")
+        check("run_command after COM SendCommand works", s == 200 and r.get("completed") is True, str(r)[:200])
+        _, now = post(base, "get_document_info")
+        check("the drawing stays active after re-activation", now.get("name") == d.get("name"), str(now.get("name")))
+    finally:
+        post(base, "close_document", discard_changes=True)
+        if home:
+            post(base, "set_active_document", name=home)

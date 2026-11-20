@@ -89,10 +89,11 @@ internal static class CommandHandlers
     internal static async Task<Outcome> Execute(Document doc, Func<Autodesk.AutoCAD.EditorInput.Editor, Task> action)
     {
         var ed = doc.Editor;
-        var dm = AcApp.DocumentManager;
         var log = CommandLog.Begin();
         string? pending = null;
         Exception? failure = null;
+        bool started = false;
+        string text = "";
         List<(string Name, object Old)>? dialogs = null;
         // System variable changes are recorded by UNDO: switch the dialogs off and back on INSIDE the
         // command's UNDO group, so undoing the call does not leave them switched off.
@@ -101,8 +102,9 @@ internal static class CommandHandlers
         UndoTracker.BeginOwnCommands();
         try
         {
-            await dm.ExecuteInCommandContextAsync(async _ =>
+            await CommandContext.Run(doc, async () =>
             {
+                started = true;
                 await ed.CommandAsync("_.UNDO", "_BEgin");
                 DialogsOff();
                 try { await action(ed); }
@@ -113,7 +115,7 @@ internal static class CommandHandlers
                     DialogsBack();
                     await ed.CommandAsync("_.UNDO", "_End");
                 }
-            }, null);
+            });
 
             if (pending != null)
             {
@@ -121,20 +123,20 @@ internal static class CommandHandlers
                 // (A "\x03" passed to CommandAsync is only another answer, not a cancel.)
                 doc.SendStringToExecute("\x03\x03", true, false, false);
                 for (int i = 0; i < 200 && Active(doc); i++) await Task.Delay(50);
-                await dm.ExecuteInCommandContextAsync(async _ =>
+                await CommandContext.Run(doc, async () =>
                 {
                     DialogsBack();
                     await ed.CommandAsync("_.UNDO", "_End");
-                }, null);
+                });
             }
         }
         finally
         {
             DialogsBack(); // only if something above failed half-way
             UndoTracker.EndOwnCommands();
-            UndoTracker.Recorded(doc, true);
+            if (started) UndoTracker.Recorded(doc, true); // not started (CommandContext busy): nothing was done
+            text = log.End();
         }
-        string text = log.End();
         try { ed.UpdateScreen(); } catch { }
 
         // Only what was printed between "UNDO _BEgin" and the closing "UNDO _End".
@@ -335,6 +337,9 @@ internal sealed class CommandLog : IDisposable
             if (JsonNode.Parse(File.ReadAllText(MarkerFile)) is JsonObject o && o["file"]?.ToString() is string file)
             {
                 Log.Info($"cleaning up the command-line log left by an interrupted call: {file}");
+                // The note exists only when the log was switched on by the call: switch it off again
+                // (AutoCAD keeps LOGFILEMODE in the profile, so it would stay on for every drawing).
+                try { AcApp.SetSystemVariable("LOGFILEMODE", 0); } catch (Exception ex) { Log.Error("cannot switch LOGFILEMODE off", ex); }
                 CleanUp(file, o["existed"]?.GetValue<bool>() ?? true, o["start"]?.GetValue<long>() ?? 0);
             }
             else File.Delete(MarkerFile);
