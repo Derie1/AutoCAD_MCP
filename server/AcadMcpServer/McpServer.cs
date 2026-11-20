@@ -18,6 +18,7 @@ internal sealed class McpServer(string version, Bridge bridge)
     private readonly CancellationTokenSource _shutdown = new();
     private Stream _out = Stream.Null;
     private JsonArray? _tools;
+    private BatchRunner? _batch;
     private string _instructions = "";
 
     public async Task<int> RunAsync(Stream input, Stream output)
@@ -51,6 +52,7 @@ internal sealed class McpServer(string version, Bridge bridge)
                       ?? throw new InvalidOperationException("tools.json is not embedded");
         var doc = JsonNode.Parse(s)!.AsObject();
         _tools = doc["tools"]!.AsArray();
+        _batch = new BatchRunner(_tools);
         _instructions = doc["instructions"]?.ToString() ?? "";
     }
 
@@ -108,7 +110,9 @@ internal sealed class McpServer(string version, Bridge bridge)
         try
         {
             JsonObject result;
-            if (name == "health_check")
+            if (name == BatchRunner.RunTool) result = await _batch!.RunAsync(args, _shutdown.Token);
+            else if (name == BatchRunner.StatusTool) result = _batch!.Status(args);
+            else if (name == "health_check")
             {
                 result = await bridge.HealthAsync(_shutdown.Token);
                 result.Remove("ok");

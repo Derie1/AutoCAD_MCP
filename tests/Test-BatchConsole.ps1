@@ -28,7 +28,10 @@ function Start-Batch([string]$year, [string]$dwg, [hashtable]$job, [string]$name
     $job | ConvertTo-Json -Depth 10 | Set-Content $jobFile -Encoding utf8
     $env:ACADMCP_BATCH_JOB = $jobFile
     $exe = "C:\Program Files\Autodesk\AutoCAD $year\accoreconsole.exe"
-    Start-Process $exe -ArgumentList "/i `"$dwg`" /s `"$work\batch_$year.scr`" /l en-US" -WindowStyle Hidden -PassThru `
+    # /isolate: own profile, as batch_run does (otherwise the console rewrites the user's LogFilePath).
+    $profile = Join-Path $env:LOCALAPPDATA "AcadMcpBridge\console\$year"
+    New-Item -ItemType Directory -Force $profile | Out-Null
+    Start-Process $exe -ArgumentList "/i `"$dwg`" /s `"$work\batch_$year.scr`" /l en-US /isolate acadmcp_batch `"$profile`"" -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $work "$name.out.txt")
 }
 
@@ -39,6 +42,12 @@ function Run-Batch([string]$year, [string]$dwg, [hashtable]$job, [string]$name) 
     if (-not (Test-Path $result)) { Check $false "$name wrote no result (exit $($p.ExitCode))"; return $null }
     Get-Content $result -Raw -Encoding utf8 | ConvertFrom-Json
 }
+
+function Get-LogPaths {
+    Get-ChildItem 'HKCU:\Software\Autodesk\AutoCAD' -Recurse -ErrorAction SilentlyContinue |
+        ForEach-Object { $v = $_.GetValue('LogFilePath'); if ($null -ne $v) { "$($_.Name)=$v" } }
+}
+$logsBefore = (Get-LogPaths) -join "`n"
 
 foreach ($year in $Years) {
     $exe = "C:\Program Files\Autodesk\AutoCAD $year\accoreconsole.exe"
@@ -125,6 +134,7 @@ foreach ($year in $Years) {
     Write-Output "    four consoles in parallel: $($sw.ElapsedMilliseconds) ms"
 }
 
+Check (((Get-LogPaths) -join "`n") -eq $logsBefore) "users' LogFilePath unchanged (consoles run /isolate)"
 Remove-Item Env:\ACADMCP_BATCH_JOB -ErrorAction SilentlyContinue
 if (Test-Path $work) { Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue }
 Write-Output "$($script:passed)/$($script:passed + $script:failed) passed"

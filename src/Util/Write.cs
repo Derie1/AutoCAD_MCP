@@ -42,12 +42,13 @@ internal static class Write
         }
     }
 
-    public static JsonObject Run(string tool, Func<Ctx, JsonObject> body)
+    /// <param name="preview">The body rolls its transaction back (dry run): allowed in a read-only drawing.</param>
+    public static JsonObject Run(string tool, Func<Ctx, JsonObject> body, bool preview = false)
     {
         var doc = JsonUtil.ActiveDocument();
         if (JsonUtil.Busy(doc))
             throw new BridgeException("busy", $"AutoCAD is running the command {doc.CommandInProgress}; finish or cancel it first", 409);
-        if (doc.IsReadOnly)
+        if (doc.IsReadOnly && !preview)
             throw new BridgeException("read_only", "the drawing is open read-only", 409);
 
         string cmd = "MCP_" + tool.ToUpperInvariant();

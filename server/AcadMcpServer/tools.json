@@ -1,5 +1,5 @@
 {
-  "instructions": "Tools that control a running AutoCAD 2025-2027 through the AcadMcpBridge plugin. If a tool says the bridge is not reachable, ask the user to press Start on the AI companion panel (Home tab) in AutoCAD or to type MCPSTART. Coordinates are [x, y, z] in drawing units (WCS); see get_document_info for the units. Every changing tool call is one step for the undo tool.",
+  "instructions": "Tools that control a running AutoCAD 2025-2027 through the AcadMcpBridge plugin. If a tool says the bridge is not reachable, ask the user to press Start on the AI companion panel (Home tab) in AutoCAD or to type MCPSTART. Coordinates are [x, y, z] in drawing units (WCS); see get_document_info for the units. Every changing tool call is one step for the undo tool. batch_run runs a list of these tools over many DWG files without an AutoCAD window (AutoCAD does not need to be running); batch_status follows a long batch.",
   "tools": [
     {
       "name": "health_check",
@@ -4194,6 +4194,158 @@
           "expression"
         ],
         "type": "object"
+      }
+    },
+    {
+      "name": "batch_run",
+      "description": "Run the same steps (calls of the other tools, with the same arguments) over many DWG files, without an\nAutoCAD window: one AutoCAD console (AcCoreConsole) per drawing, several in parallel. AutoCAD itself does\nnot need to be running and the user's open drawings are not touched. About 2-3 s per drawing plus the\nsteps; 4 drawings in parallel take about as long as one.\n\nThis version only READS drawings: they are opened read-only and never saved. Allowed steps: get_*, list_*,\nfind_entities, extract_block_attributes, get_table, audit without fix, and tools with dry_run: true\n(purge, update_block_attributes, delete_entities, ... preview what they would do). Not in batches:\nopening/saving/closing drawings, zoom, capture_view, selection, undo, run_command, eval_lisp, plot_to_pdf.\n\nSteps of a file stop at the first failed step unless continue_on_error is true.\n\nWaits up to wait_seconds (default 600) and returns the report; a longer batch keeps running and returns\na job_id for batch_status. The report lists per file: ok, and per step: ok with result, or code and\nerror. Long reports come in parts (next_offset).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "tool"
+              ]
+            },
+            "description": "Tool calls in order, e.g. [{\"tool\": \"list_layers\", \"args\": {\"with_counts\": true}}, {\"tool\": \"audit\"}]."
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Folder with the drawings (full path). Use this and/or files."
+          },
+          "pattern": {
+            "default": "*.dwg",
+            "type": "string",
+            "description": "File mask in folder, e.g. \"E-*.dwg\"."
+          },
+          "recursive": {
+            "default": false,
+            "type": "boolean",
+            "description": "Include subfolders of folder."
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Full paths of DWG files."
+          },
+          "continue_on_error": {
+            "default": false,
+            "type": "boolean",
+            "description": "Run the remaining steps of a file after a failed step."
+          },
+          "autocad_version": {
+            "anyOf": [
+              {
+                "enum": [
+                  "2025",
+                  "2026",
+                  "2027"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Which AutoCAD console to use. Default: the newest installed one with the plugin."
+          },
+          "parallel": {
+            "anyOf": [
+              {
+                "maximum": 8,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Consoles at once. Default: half the processor cores, at most 4."
+          },
+          "file_timeout_seconds": {
+            "default": 300,
+            "minimum": 10,
+            "maximum": 3600,
+            "type": "integer",
+            "description": "A console still running after this is stopped; the file is reported as failed."
+          },
+          "wait_seconds": {
+            "default": 600,
+            "minimum": 0,
+            "maximum": 600,
+            "type": "integer",
+            "description": "How long to wait for the whole batch before returning the job_id (it keeps running)."
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      }
+    },
+    {
+      "name": "batch_status",
+      "description": "Progress and report of a batch started by batch_run: status (running, done, cancelled, failed), counts\nof finished / ok / failed files, and the per-file results from offset. cancel: true stops a running batch\n(running consoles are stopped, files not started are skipped). Without job_id: the list of batches of\nthis session (kept while the MCP server runs).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "From batch_run."
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer",
+            "description": "First file of the report (next_offset of the previous answer)."
+          },
+          "cancel": {
+            "default": false,
+            "type": "boolean",
+            "description": "Stop the batch."
+          }
+        }
       }
     }
   ]

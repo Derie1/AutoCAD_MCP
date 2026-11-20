@@ -130,7 +130,7 @@ internal static class MaintenanceHandlers
                 [dryRun ? "would_remove" : "removed"] = byKind,
                 ["note"] = dryRun && removed.Count > 0 ? "nothing was changed; call again with dry_run: false to purge" : null,
             };
-        });
+        }, preview: dryRun);
     }
 
     /// <summary>
