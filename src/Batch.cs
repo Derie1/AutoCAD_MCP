@@ -48,7 +48,6 @@ internal static class Batch
             ["undo"] = "a batch has no undo: a drawing changes on disk only when the batch saves it",
             ["run_command"] = "AutoCAD commands are not available in batches yet",
             ["eval_lisp"] = "AutoLISP is not available in batches yet",
-            ["plot_to_pdf"] = "printing to PDF is not available in batches yet",
         };
 
     /// <summary>Tools that run AutoCAD commands in a batch (asynchronously, inside MCPBATCH).</summary>

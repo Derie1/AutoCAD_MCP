@@ -260,6 +260,43 @@ async def writes(session, year: str) -> None:
         shutil.rmtree(out, ignore_errors=True)
 
 
+async def plots(session, year: str) -> None:
+    """plot_to_pdf in a batch: path is a folder, one PDF per drawing (subfolders kept) or per layout."""
+    print(f"== printing to PDF (AutoCAD {year})")
+    folder = prepare(year)
+    (folder / "broken.dwg").unlink()
+    pdfs = WORK.parent / "acadmcp_batch_mcp_pdf"
+    shutil.rmtree(pdfs, ignore_errors=True)
+    try:
+        ok, r = await call(session, "batch_run", {"folder": str(folder), "recursive": True, "autocad_version": year,
+                                                  "steps": [{"tool": "plot_to_pdf", "args": {"path": str(pdfs), "layouts": "*"}}]})
+        names = sorted(str(f.relative_to(pdfs)) for f in pdfs.rglob("*.pdf"))
+        check("plot: one PDF per drawing, subfolder kept", ok and r["ok_files"] == 4 and r["save"] == "none (read-only)"
+              and names == ["a.pdf", "b.pdf", "c.pdf", "sub\\d.pdf"], f"{names} {str(r)[:300]}")
+        check("plot: PDFs are not empty", all(f.stat().st_size > 1000 for f in pdfs.rglob("*.pdf")), str(names))
+        check("plot: drawings untouched", not list(folder.rglob("*.bak")) and not list(folder.rglob("*.dwl*")), "")
+
+        ok, text = await call(session, "batch_run", {"folder": str(folder), "autocad_version": year,
+                                                     "steps": [{"tool": "plot_to_pdf", "args": {"path": str(pdfs)}}]})
+        check("plot: existing PDFs refused without overwrite", not ok and "overwrite" in str(text), str(text)[:200])
+        ok, r = await call(session, "batch_run", {"files": [str(folder / "a.dwg")], "autocad_version": year,
+                                                  "steps": [{"tool": "plot_to_pdf", "args": {"path": str(pdfs), "overwrite": True}}]})
+        check("plot: overwrite replaces", ok and r["ok_files"] == 1, str(r)[:300])
+
+        ok, r = await call(session, "batch_run", {"files": [str(folder / "b.dwg")], "autocad_version": year,
+                                                  "steps": [{"tool": "plot_to_pdf", "args": {"path": str(pdfs / "sep"),
+                                                            "layouts": "*", "separate_files": True}}]})
+        sep = sorted(f.name for f in (pdfs / "sep").glob("*.pdf")) if (pdfs / "sep").exists() else []
+        check("plot: separate_files -> a PDF per layout", ok and r["ok_files"] == 1 and sep == ["b-Layout1.pdf", "b-Layout2.pdf"],
+              f"{sep} {str(r)[:300]}")
+
+        ok, text = await call(session, "batch_run", {"folder": str(folder), "autocad_version": year,
+                                                     "steps": [{"tool": "plot_to_pdf", "args": {"path": str(pdfs / "x.pdf")}}]})
+        check("plot: a .pdf path is refused (folder expected)", not ok and "FOLDER" in str(text), str(text)[:200])
+    finally:
+        shutil.rmtree(pdfs, ignore_errors=True)
+
+
 async def refusals(session) -> None:
     print("== refusals (no console starts)")
     folder = WORK if WORK.exists() else Path(tempfile.gettempdir())
@@ -312,6 +349,7 @@ async def main_async(years: list[str]) -> None:
                     continue
                 await run_year(session, year)
                 await writes(session, year)
+                await plots(session, year)
             if WORK.exists():
                 await open_in_autocad(session, next(y for y in reversed(years) if sample(y).exists()))
             await refusals(session)

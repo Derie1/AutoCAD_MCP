@@ -21,12 +21,12 @@ internal sealed class BatchRunner(JsonArray tools)
     private const int MaxReportChars = 60_000;
     private const int KeptJobs = 20;
 
-    /// <summary>Tools that only read (the batch drawings are opened read-only in this version).</summary>
+    /// <summary>Tools that do not change the drawing (printing writes PDF files only).</summary>
     private static readonly HashSet<string> ReadTools = new(StringComparer.OrdinalIgnoreCase)
     {
         "get_document_info", "find_entities", "get_entity_properties", "get_system_variable",
         "list_layers", "list_blocks", "list_layouts", "list_xrefs", "list_styles",
-        "get_table", "extract_block_attributes",
+        "get_table", "extract_block_attributes", "plot_to_pdf",
     };
 
     /// <summary>Same list as the plugin's Batch.NotInBatch (checked here before any console starts).</summary>
@@ -47,7 +47,6 @@ internal sealed class BatchRunner(JsonArray tools)
         ["undo"] = "a batch has no undo",
         ["run_command"] = "AutoCAD commands are not available in batches yet",
         ["eval_lisp"] = "AutoLISP is not available in batches yet",
-        ["plot_to_pdf"] = "printing to PDF is not available in batches yet",
         [RunTool] = "a batch cannot start another batch",
         [StatusTool] = "a batch cannot start another batch",
     };
@@ -74,6 +73,8 @@ internal sealed class BatchRunner(JsonArray tools)
         bool goOn = Bool(a, "continue_on_error");
         var files = ListFiles(a);
         var targets = SaveTargets(a, files, writes, out SaveMode mode);
+        string? root = Str(a, "folder") is { Length: > 0 } rootFolder ? Path.GetFullPath(rootFolder) : null;
+        CheckPlots(steps, files, root);
         var console = PickConsole(Str(a, "autocad_version"));
         int parallel = Int(a, "parallel", DefaultParallel(), 1, 8);
         int fileTimeout = Int(a, "file_timeout_seconds", 300, 10, 3600);
@@ -84,6 +85,7 @@ internal sealed class BatchRunner(JsonArray tools)
         {
             Mode = mode,
             Targets = targets,
+            Root = root,
         };
         foreach (var old in _jobs.Values.Where(j => j.Finished).OrderBy(j => j.Started).SkipLast(KeptJobs - 1).ToList())
             _jobs.TryRemove(old.Id, out _);
@@ -139,6 +141,65 @@ internal sealed class BatchRunner(JsonArray tools)
 
     private enum SaveMode { None, Copy, InPlace }
 
+    /// <summary>A file's path below 'folder' (subfolders are kept in output folders), else its name.</summary>
+    private static string Relative(string file, string? root) =>
+        root != null && file.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetRelativePath(root, file) : Path.GetFileName(file);
+
+    /// <summary>
+    /// plot_to_pdf in a batch: 'path' is the folder for the PDFs of all drawings. Each drawing gets
+    /// folder\(subfolder)\name.pdf, or with separate_files folder\(subfolder)\name-layout.pdf.
+    /// </summary>
+    private static void CheckPlots(JsonArray steps, List<string> files, string? root)
+    {
+        foreach (var step in steps)
+        {
+            if (step!["tool"]!.ToString() != "plot_to_pdf") continue;
+            var args = (JsonObject)step["args"]!;
+            string folder = Str(args, "path") ?? throw new ToolException("plot_to_pdf in a batch needs path: the folder for the PDFs");
+            if (!Path.IsPathFullyQualified(folder)) throw new ToolException($"plot_to_pdf path '{folder}' is not a full path");
+            if (folder.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                throw new ToolException("in a batch, plot_to_pdf path is a FOLDER for the PDFs (each drawing gets <name>.pdf, " +
+                    "or <name>-<layout>.pdf with separate_files); give a folder");
+            if (Bool(args, "separate_files")) continue; // file names depend on the layouts: checked per drawing
+            var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var existing = new List<string>();
+            foreach (string f in files)
+            {
+                string pdf = PdfFor(folder, f, root, false);
+                if (seen.TryGetValue(pdf, out string? other))
+                    throw new ToolException($"'{other}' and '{f}' would both print to '{pdf}'; give them separately");
+                seen[pdf] = f;
+                if (File.Exists(pdf)) existing.Add(pdf);
+            }
+            if (existing.Count > 0 && !Bool(args, "overwrite"))
+                throw new ToolException($"{existing.Count} PDF file(s) already exist, e.g. '{existing[0]}'; ask the user, then pass " +
+                    "overwrite: true in the plot_to_pdf args to replace them, or choose another folder. Nothing was run.");
+        }
+    }
+
+    private static string PdfFor(string folder, string file, string? root, bool separate)
+    {
+        string dir = Path.GetFullPath(Path.Combine(folder, Path.GetDirectoryName(Relative(file, root)) ?? ""));
+        return separate ? dir : Path.Combine(dir, Path.GetFileNameWithoutExtension(file) + ".pdf");
+    }
+
+    /// <summary>The steps for one drawing: plot_to_pdf gets that drawing's PDF path (its folder is created).</summary>
+    private static JsonArray StepsFor(JsonArray steps, string file, string? root)
+    {
+        var copy = (JsonArray)steps.DeepClone();
+        foreach (var step in copy)
+        {
+            if (step!["tool"]!.ToString() != "plot_to_pdf") continue;
+            var args = (JsonObject)step["args"]!;
+            bool separate = Bool(args, "separate_files");
+            string target = PdfFor(Str(args, "path")!, file, root, separate);
+            Directory.CreateDirectory(separate ? target : Path.GetDirectoryName(target)!);
+            args["path"] = target;
+        }
+        return copy;
+    }
+
     /// <summary>
     /// Where each drawing is saved when the steps change it (null: not saved). Changing steps need an explicit
     /// choice that the model asks the user for: copies in an output folder, or over the originals with .bak.
@@ -173,10 +234,7 @@ internal sealed class BatchRunner(JsonArray tools)
         var existing = new List<string>();
         for (int i = 0; i < files.Count; i++)
         {
-            // Under 'folder' the subfolders are kept (recursive), other files go to output_folder itself.
-            string rel = root != null && files[i].StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)
-                ? Path.GetRelativePath(root, files[i]) : Path.GetFileName(files[i]);
-            string target = Path.GetFullPath(Path.Combine(output, rel));
+            string target = Path.GetFullPath(Path.Combine(output, Relative(files[i], root)));
             if (string.Equals(target, files[i], StringComparison.OrdinalIgnoreCase))
                 throw new ToolException($"output_folder is the drawings' own folder ('{files[i]}' would overwrite itself); " +
                     "choose another folder, or save: \"in_place\" with confirm: true");
@@ -299,6 +357,7 @@ internal sealed class BatchRunner(JsonArray tools)
         public bool Finished => Ended != null;
         public SaveMode Mode { get; init; }
         public string?[] Targets { get; init; } = [];
+        public string? Root { get; init; }
     }
 
     private async Task RunJob(Job job, JsonArray steps, bool goOn, int fileTimeout, CancellationToken serverShutdown)
@@ -339,7 +398,7 @@ internal sealed class BatchRunner(JsonArray tools)
         string resultFile = Path.Combine(dir, "result.json");
         var plan = new JsonObject
         {
-            ["steps"] = steps.DeepClone(),
+            ["steps"] = StepsFor(steps, file, job.Root),
             ["continue_on_error"] = goOn,
             ["result"] = resultFile,
         };
