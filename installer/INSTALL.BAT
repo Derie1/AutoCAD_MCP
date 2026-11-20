@@ -163,6 +163,7 @@ echo   %TARGET%
 call :show_installed
 
 call :remove_old_python
+call :write_config
 call :register_clients
 
 echo.
@@ -179,6 +180,31 @@ echo %M_OLD_VENV%
 echo   %OLD_VENV%
 rmdir /s /q "%OLD_VENV%" >nul 2>&1
 if exist "%OLD_VENV%" (echo %M_OLD_VENV_FAILED%) else echo %M_OLD_VENV_REMOVED%
+exit /b 0
+
+rem ---------------------------------------------------------------- settings template
+rem config.json with the defaults; AutoCAD commands and AutoLISP are off ("allowCommands": false) until the
+rem user allows them with the Commands button / MCPCOMMANDS. An existing file is the user's: never changed.
+:write_config
+echo.
+if exist "%DATA%\config.json" (
+    echo %M_CONFIG_KEPT%
+    echo   %DATA%\config.json
+    exit /b 0
+)
+if not exist "%DATA%" mkdir "%DATA%" >nul 2>&1
+(
+    echo {
+    echo   "port": 8766,
+    echo   "token": "",
+    echo   "requestTimeoutSeconds": 30,
+    echo   "allowCommands": false
+    echo }
+) >"%DATA%\config.json"
+rem Not in a ( ) block: the messages contain parentheses.
+if exist "%DATA%\config.json" echo %M_CONFIG_CREATED%
+if not exist "%DATA%\config.json" echo %M_CONFIG_FAILED%
+echo   %DATA%\config.json
 exit /b 0
 
 rem ---------------------------------------------------------------- AI clients
@@ -401,6 +427,9 @@ set "M_REMOVE_FAILED=ERROR: could not remove"
 set "M_REMOVED=The plugin has been removed."
 set "M_REMOVE_DATA=Also delete the settings and log in %DATA%"
 set "M_DATA_REMOVED=Settings and log deleted."
+set "M_CONFIG_CREATED=Settings file created (AutoCAD commands and AutoLISP are off; allow them with the Commands button):"
+set "M_CONFIG_KEPT=Settings file already exists, left as it is:"
+set "M_CONFIG_FAILED=WARNING: could not create the settings file; the plugin uses the defaults:"
 set "M_UNSUPPORTED_1=AutoCAD %%CHOICE%% is not supported."
 set "M_UNSUPPORTED_2=The plugin runs in AutoCAD %MIN_YEAR% to %MAX_YEAR%: older versions use .NET Framework."
 set "M_TOO_NEW_1=AutoCAD %%CHOICE%% is not supported by this release yet."
@@ -454,6 +483,9 @@ set "M_REMOVE_FAILED=ОШИБКА: не удалось удалить"
 set "M_REMOVED=Плагин удалён."
 set "M_REMOVE_DATA=Удалить также настройки и журнал в %DATA%"
 set "M_DATA_REMOVED=Настройки и журнал удалены."
+set "M_CONFIG_CREATED=Создан файл настроек (команды AutoCAD и AutoLISP выключены; разрешить — кнопкой Commands):"
+set "M_CONFIG_KEPT=Файл настроек уже есть, оставлен без изменений:"
+set "M_CONFIG_FAILED=ВНИМАНИЕ: не удалось создать файл настроек; плагин работает с настройками по умолчанию:"
 set "M_UNSUPPORTED_1=AutoCAD %%CHOICE%% не поддерживается."
 set "M_UNSUPPORTED_2=Плагин работает в AutoCAD %MIN_YEAR%-%MAX_YEAR%: старые версии используют .NET Framework."
 set "M_TOO_NEW_1=AutoCAD %%CHOICE%% этим выпуском ещё не поддерживается."

@@ -82,7 +82,8 @@ Claude Desktop, Claude Code и Codex.
 **Управление**
 Панель **AI companion** на вкладке «Главная»: кнопки **Start**, **Stop**, **Status** и переключатель
 **Commands** (команды `MCPSTART`, `MCPSTOP`, `MCPSTATUS`, `MCPCOMMANDS`). Чтобы команды были разрешены
-всегда, без кнопки, добавьте `"allowCommands": true` в `%LOCALAPPDATA%\AcadMcpBridge\config.json`.
+всегда, без кнопки, поставьте `"allowCommands": true` в `%LOCALAPPDATA%\AcadMcpBridge\config.json`
+(установщик создаёт его с `false`) и перезапустите AutoCAD.
 
 ## Требования
 
@@ -103,6 +104,8 @@ Claude Desktop, Claude Code и Codex.
 3. Выберите язык установщика, затем версию AutoCAD (год, например `2026`) или `A` — все поддерживаемые.
 4. Установщик:
    - установит плагин в `%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle`;
+   - создаст файл настроек `%LOCALAPPDATA%\AcadMcpBridge\config.json` (команды AutoCAD и AutoLISP в нём
+     выключены; если файл уже есть, он не меняется);
    - найдёт Claude Desktop, Claude Code и Codex и для каждого спросит, подключить ли сервер `autocad`
      (перед правкой настроек клиента сохраняется их копия; другие серверы не затрагиваются).
 5. Перезапустите подключённые ИИ-клиенты.
@@ -207,7 +210,8 @@ commands and AutoLISP only after you allow it.
 **Control**
 The **AI companion** panel on the **Home** tab: **Start**, **Stop**, **Status** buttons and the **Commands**
 toggle (commands `MCPSTART`, `MCPSTOP`, `MCPSTATUS`, `MCPCOMMANDS`). To allow commands always, without the
-button, add `"allowCommands": true` to `%LOCALAPPDATA%\AcadMcpBridge\config.json`.
+button, set `"allowCommands": true` in `%LOCALAPPDATA%\AcadMcpBridge\config.json` (the installer
+creates it with `false`) and restart AutoCAD.
 
 ## Requirements
 
@@ -228,6 +232,8 @@ Nothing else to install: no Python and no internet needed during installation; t
 3. Choose the installer language, then the AutoCAD version (a year such as `2026`) or `A` for all supported.
 4. The installer:
    - installs the plugin to `%APPDATA%\Autodesk\ApplicationPlugins\AcadMcpBridge.bundle`;
+   - creates the settings file `%LOCALAPPDATA%\AcadMcpBridge\config.json` (AutoCAD commands and AutoLISP
+     are off in it; an existing file is left as it is);
    - finds Claude Desktop, Claude Code and Codex and asks for each whether to connect the `autocad`
      server (a copy of the client's settings is kept before the change; other servers are not touched).
 5. Restart the connected AI clients.

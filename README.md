@@ -263,7 +263,8 @@ python -m venv .venv
 
 ## Настройки
 
-`%LOCALAPPDATA%\AcadMcpBridge\config.json` (необязательный):
+`%LOCALAPPDATA%\AcadMcpBridge\config.json` — создаётся установщиком со значениями по умолчанию (существующий
+файл не меняется); без файла плагин работает с теми же значениями:
 
 ```json
 { "port": 8766, "token": "", "requestTimeoutSeconds": 30, "allowCommands": false }
