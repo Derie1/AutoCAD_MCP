@@ -4179,6 +4179,22 @@
         ],
         "type": "object"
       }
+    },
+    {
+      "name": "eval_lisp",
+      "description": "Evaluate AutoLISP in the active drawing and get the result back. Only when the user has allowed\ncommands and AutoLISP in AutoCAD (otherwise: commands_disabled; tell the user how to allow them).\nPrefer the dedicated tools; use this for calculations and data work they cannot do (entget/entmod,\ndictionaries, custom LISP functions, (load \"C:\\\\path\\\\file.lsp\")).\n\nexpression: one or more forms; the value of the last one is returned. value is JSON (numbers, strings,\nlists, points as arrays, nil -> null, T -> true, dotted pairs as [car, cdr], entities as {entity: handle},\nselection sets as {selection_set: count, handles}); lisp is the same value printed as AutoLISP; output is\nwhat it printed (princ). A LISP error comes back in error.\n\nNot allowed (they would block AutoCAD): command, command-s, vl-cmdf — use run_command for commands —\nand functions that wait for the user: getpoint, getstring, getkword …, entsel, nentsel, ssget without a\nmode string (ssget \"_X\" … is fine). An endless loop blocks AutoCAD. The whole call is one undo step.",
+      "inputSchema": {
+        "properties": {
+          "expression": {
+            "description": "AutoLISP code, e.g. (getvar \"CLAYER\") or (cdr (assoc 0 (entget (handent \"7C\"))))",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "type": "object"
+      }
     }
   ]
 }

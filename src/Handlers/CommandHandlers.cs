@@ -61,6 +61,33 @@ internal static class CommandHandlers
 
     private static async Task<JsonObject> Run(Document doc, string command, List<object> tokens)
     {
+        var r = await Execute(doc, async ed => await ed.CommandAsync(tokens.ToArray()));
+        var failure = r.Failure;
+        if (failure == null && r.Body.Any(l => l.Contains("Unknown command", StringComparison.OrdinalIgnoreCase)))
+            failure = new InvalidOperationException($"unknown command {command}");
+        return new JsonObject
+        {
+            ["command"] = command,
+            ["completed"] = r.Pending == null && failure == null,
+            ["cancelled_waiting_for_input"] = r.Pending != null,
+            ["waiting_command"] = r.Pending,
+            ["last_prompt"] = r.LastPrompt,
+            ["error"] = failure?.Message,
+            ["command_line"] = Tail(string.Join("\n", r.Body), 4000),
+            ["still_active"] = r.StillActive,
+        };
+    }
+
+    /// <summary>What happened in Execute.</summary>
+    internal sealed record Outcome(string? Pending, Exception? Failure, List<string> Body, string? LastPrompt, string? StillActive);
+
+    /// <summary>
+    /// Runs an action in the command context of the active drawing, the way run_command and eval_lisp need:
+    /// one UNDO group around it, dialogs off inside the group, the command-line echo captured, and a command
+    /// left waiting for input cancelled (with the prompt it was waiting at).
+    /// </summary>
+    internal static async Task<Outcome> Execute(Document doc, Func<Autodesk.AutoCAD.EditorInput.Editor, Task> action)
+    {
         var ed = doc.Editor;
         var dm = AcApp.DocumentManager;
         var log = CommandLog.Begin();
@@ -78,7 +105,7 @@ internal static class CommandHandlers
             {
                 await ed.CommandAsync("_.UNDO", "_BEgin");
                 DialogsOff();
-                try { await ed.CommandAsync(tokens.ToArray()); }
+                try { await action(ed); }
                 catch (Exception ex) { failure = ex; }
                 if (Active(doc)) pending = doc.CommandInProgress; // the answers ran out
                 else
@@ -110,12 +137,16 @@ internal static class CommandHandlers
         string text = log.End();
         try { ed.UpdateScreen(); } catch { }
 
-        // Only what the command printed: after "UNDO _BEgin", before the closing "UNDO _End".
-        var lines = text.Split('\n').Select(l => l.TrimEnd('\r').Trim()).Where(l => l.Length > 0).ToList();
-        int from = lines.FindIndex(l => l.EndsWith("_BEgin", StringComparison.OrdinalIgnoreCase));
-        int to = lines.FindLastIndex(l => l.StartsWith("Command: _.UNDO", StringComparison.OrdinalIgnoreCase)
-                                          || l.StartsWith("_.UNDO", StringComparison.OrdinalIgnoreCase));
-        var body = lines.Skip(from + 1).Take((to > from ? to : lines.Count) - from - 1).ToList();
+        // Only what was printed between "UNDO _BEgin" and the closing "UNDO _End".
+        // Cut by text, not by lines: printed text without a final newline glues the closing "_.UNDO" to it.
+        int begin = text.IndexOf("_BEgin", StringComparison.OrdinalIgnoreCase);
+        if (begin >= 0) text = text[(begin + "_BEgin".Length)..];
+        int end = text.LastIndexOf("_.UNDO", StringComparison.OrdinalIgnoreCase);
+        if (end >= 0) text = text[..end];
+        var body = text.Split('\n').Select(l => l.TrimEnd('\r').Trim()).Where(l => l.Length > 0).ToList();
+        if (body.Count > 0 && body[^1].Equals("Command:", StringComparison.OrdinalIgnoreCase)) body.RemoveAt(body.Count - 1);
+        if (body.Count > 0 && body[^1].EndsWith("Command:", StringComparison.OrdinalIgnoreCase))
+            body[^1] = body[^1][..^"Command:".Length].TrimEnd();
         string? lastPrompt = null;
         if (pending != null)
         {
@@ -124,31 +155,24 @@ internal static class CommandHandlers
             string line = c >= 0 ? body[c].Replace("*Cancel*", "").Trim() : (body.Count > 0 ? body[^1] : "");
             lastPrompt = line.Length > 0 && !line.Equals("Command:", StringComparison.OrdinalIgnoreCase) ? line
                        : c > 0 ? body[c - 1] : null;
-            // Drop the cancellation echo itself.
-            if (c >= 0) body = body.Take(c).ToList();
+            if (c >= 0) body = body.Take(c).ToList(); // drop the cancellation echo itself
         }
-        if (failure == null && body.Any(l => l.Contains("Unknown command", StringComparison.OrdinalIgnoreCase)))
-            failure = new InvalidOperationException($"unknown command {command}");
-
-        return new JsonObject
-        {
-            ["command"] = command,
-            ["completed"] = pending == null && failure == null,
-            ["cancelled_waiting_for_input"] = pending != null,
-            ["waiting_command"] = pending,
-            ["last_prompt"] = lastPrompt,
-            ["error"] = failure?.Message,
-            ["command_line"] = Tail(string.Join("\n", body), 4000),
-            ["still_active"] = Active(doc) ? doc.CommandInProgress : null,
-        };
+        return new Outcome(pending, failure, body, lastPrompt, Active(doc) ? doc.CommandInProgress : null);
     }
 
-    private static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
+    internal static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
 }
 
-/// <summary>Temporarily changed system variables.</summary>
+/// <summary>
+/// Temporarily changed system variables. FILEDIA/CMDDIA live in the user's profile: if AutoCAD is closed
+/// or killed in the middle of a call, the old values are kept in a file and put back when the plugin
+/// loads next time (RecoverAfterCrash).
+/// </summary>
 internal static class SysVars
 {
+    private static string PendingFile =>
+        Path.Combine(BridgeConfig.Folder, $"sysvars_restore_{BridgeApp.Host.AcadVer.Replace(' ', '_')}.json");
+
     public static List<(string Name, object Old)> Set(params (string Name, object Value)[] vars)
     {
         var old = new List<(string, object)>();
@@ -161,6 +185,14 @@ internal static class SysVars
             }
             catch (Exception ex) { Log.Error($"cannot set {name}", ex); }
         }
+        try
+        {
+            var o = new JsonObject();
+            foreach (var (name, value) in old) o[name] = JsonUtil.FromObject(value);
+            Directory.CreateDirectory(BridgeConfig.Folder);
+            File.WriteAllText(PendingFile, o.ToJsonString());
+        }
+        catch (Exception ex) { Log.Error("cannot remember system variables", ex); }
         return old;
     }
 
@@ -168,6 +200,29 @@ internal static class SysVars
     {
         foreach (var (name, value) in old)
             try { AcApp.SetSystemVariable(name, value); } catch (Exception ex) { Log.Error($"cannot restore {name}", ex); }
+        try { File.Delete(PendingFile); } catch { /* next load restores again: harmless */ }
+    }
+
+    /// <summary>Plugin load: put back variables a call switched off before AutoCAD was closed or killed.</summary>
+    public static void RecoverAfterCrash()
+    {
+        try
+        {
+            if (!File.Exists(PendingFile)) return;
+            if (JsonNode.Parse(File.ReadAllText(PendingFile)) is JsonObject o)
+                foreach (var (name, node) in o)
+                {
+                    try
+                    {
+                        object value = node is JsonValue v && v.TryGetValue(out long l) ? (object)(short)l : node?.ToString() ?? "";
+                        AcApp.SetSystemVariable(name, value);
+                        Log.Info($"restored {name} = {value} (left by an interrupted run_command / eval_lisp)");
+                    }
+                    catch (Exception ex) { Log.Error($"cannot restore {name}", ex); }
+                }
+            File.Delete(PendingFile);
+        }
+        catch (Exception ex) { Log.Error("cannot recover system variables", ex); }
     }
 }
 
@@ -202,6 +257,7 @@ internal sealed class CommandLog : IDisposable
             if (!userLog) AcApp.SetSystemVariable("LOGFILEMODE", 1);
             string file = Convert.ToString(AcApp.GetSystemVariable("LOGFILENAME")) ?? "";
             if (!file.Equals(before, StringComparison.OrdinalIgnoreCase)) { existed = false; start = 0; }
+            if (!userLog) Remember(file, existed, start);
             return new CommandLog(!userLog, file, start, existed);
         }
         catch (Exception ex)
@@ -241,9 +297,12 @@ internal sealed class CommandLog : IDisposable
     {
         try
         {
-            if (!File.Exists(file)) return;
-            if (!existed) File.Delete(file);
-            else using (var fs = new FileStream(file, FileMode.Open, FileAccess.Write, FileShare.ReadWrite)) fs.SetLength(start);
+            if (File.Exists(file))
+            {
+                if (!existed) File.Delete(file);
+                else using (var fs = new FileStream(file, FileMode.Open, FileAccess.Write, FileShare.ReadWrite)) fs.SetLength(start);
+            }
+            try { File.Delete(MarkerFile); } catch { }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -251,6 +310,36 @@ internal sealed class CommandLog : IDisposable
             void Once(object? s, EventArgs e) { AcApp.Idle -= Once; CleanUp(file, existed, start, attempt + 1); }
             AcApp.Idle += Once;
         }
+    }
+
+    // If AutoCAD is closed or killed during a call, the clean-up above never runs: the log to clean is noted
+    // in a file and cleaned when the plugin loads next time.
+    private static string MarkerFile => Path.Combine(BridgeConfig.Folder, "commandlog_cleanup.json");
+
+    private static void Remember(string file, bool existed, long start)
+    {
+        try
+        {
+            Directory.CreateDirectory(BridgeConfig.Folder);
+            File.WriteAllText(MarkerFile, new JsonObject { ["file"] = file, ["existed"] = existed, ["start"] = start }.ToJsonString());
+        }
+        catch (Exception ex) { Log.Error("cannot note the command-line log", ex); }
+    }
+
+    /// <summary>Plugin load: clean up a command-line log left by an interrupted run_command / eval_lisp.</summary>
+    public static void RecoverAfterCrash()
+    {
+        try
+        {
+            if (!File.Exists(MarkerFile)) return;
+            if (JsonNode.Parse(File.ReadAllText(MarkerFile)) is JsonObject o && o["file"]?.ToString() is string file)
+            {
+                Log.Info($"cleaning up the command-line log left by an interrupted call: {file}");
+                CleanUp(file, o["existed"]?.GetValue<bool>() ?? true, o["start"]?.GetValue<long>() ?? 0);
+            }
+            else File.Delete(MarkerFile);
+        }
+        catch (Exception ex) { Log.Error("cannot clean up the command-line log", ex); }
     }
 
     public void Dispose() => End();

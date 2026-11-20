@@ -35,6 +35,7 @@ internal static class Routes
 
             // commands and AutoLISP (only when the user allowed them)
             Route.Async("run_command", CommandHandlers.RunCommand, minTimeoutSeconds: 300),
+            Route.Async("eval_lisp", LispHandlers.EvalLisp, minTimeoutSeconds: 300),
 
             Route.Main("list_layers", CatalogHandlers.ListLayers),
             Route.Main("list_blocks", CatalogHandlers.ListBlocks),

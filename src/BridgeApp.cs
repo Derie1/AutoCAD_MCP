@@ -1,3 +1,4 @@
+using AcadMcpBridge.Handlers;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -14,7 +15,7 @@ namespace AcadMcpBridge;
 /// </summary>
 public sealed class BridgeApp : IExtensionApplication
 {
-    public const string PluginVersion = "0.5.2";
+    public const string PluginVersion = "0.5.3";
 
     internal static BridgeServer? Server { get; private set; }
 
@@ -28,6 +29,8 @@ public sealed class BridgeApp : IExtensionApplication
         CommandAccess.Init();
         RibbonUi.Init();
         Host = HostInfo.Capture();
+        SysVars.RecoverAfterCrash();
+        CommandLog.RecoverAfterCrash();
         Log.Info($"Loaded {PluginVersion} ({BuildInfo.Series}) in {Host.Product} {Host.AcadVer}, .NET {Environment.Version}");
     }
 

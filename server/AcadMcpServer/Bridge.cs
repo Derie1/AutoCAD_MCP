@@ -15,6 +15,7 @@ internal sealed class Bridge
     {
         ["plot_to_pdf"] = 900,
         ["run_command"] = 330,
+        ["eval_lisp"] = 330,
     };
 
     private readonly HttpClient _http;

@@ -19,6 +19,8 @@ def run(base: str, post: Callable, count: Callable, check: Callable, http: Calla
         s, r = post(base, "run_command", command="_.REGEN")
         check("run_command while not allowed -> 403 commands_disabled", s == 403 and r.get("code") == "commands_disabled"
               and "MCPCOMMANDS" in r.get("error", ""), str(r)[:300])
+        s, r = post(base, "eval_lisp", expression="(+ 1 2)")
+        check("eval_lisp while not allowed -> 403 commands_disabled", s == 403 and r.get("code") == "commands_disabled", str(r)[:300])
         return
 
     _, before = post(base, "get_system_variable", names=["FILEDIA", "CMDDIA", "LOGFILEMODE", "LOGFILEPATH"])
@@ -71,3 +73,55 @@ def run(base: str, post: Callable, count: Callable, check: Callable, http: Calla
     ]:
         s, r = post(base, "run_command", **args)
         check(f"run_command {name} -> {code}", s == code, str(r)[:200])
+
+    _lisp(base, post, count, check)
+
+
+def _lisp(base: str, post: Callable, count: Callable, check: Callable) -> None:
+    """Step 3: eval_lisp."""
+    def ev(expr: str):
+        return post(base, "eval_lisp", expression=expr)
+
+    s, r = ev("(+ 1 2)")
+    check("eval_lisp number", s == 200 and r.get("value") == 3 and r.get("lisp") == "3", str(r)[:300])
+    s, r = ev("(list 1 2.5 \"x\" (list 3 4) '(5 . 6) nil T)")
+    check("eval_lisp list with nested list, dotted pair, nil, T", s == 200
+          and r.get("value") == [1, 2.5, "x", [3, 4], [5, 6], None, True], str(r)[:300])
+    s, r = ev("(getvar \"CLAYER\")")
+    check("eval_lisp getvar", s == 200 and isinstance(r.get("value"), str), str(r)[:300])
+    s, r = ev('(princ "hello") (princ "\nworld") 42')
+    check("eval_lisp several forms, printed output", s == 200 and r.get("value") == 42
+          and r.get("output") == "hello\nworld", str(r)[:300])
+    s, r = ev("(/ 1 0)")
+    check("eval_lisp LISP error comes back as error", s == 200 and r.get("error") == "divide by zero"
+          and r.get("completed") is False, str(r)[:300])
+
+    s, r = ev('(entmakex (list (cons 0 "CIRCLE") (cons 10 (list 72000 0 0)) (cons 40 5.0) (cons 8 "0")))')
+    handle = (r.get("value") or {}).get("entity")
+    _, p = post(base, "get_entity_properties", handles=[handle or "0"])
+    check("eval_lisp entmakex returns the entity handle", s == 200 and handle
+          and (p.get("items") or [{}])[0].get("type") == "CIRCLE", str(r)[:300])
+    s, r = ev(f'(cdr (assoc 40 (entget (handent "{handle}"))))')
+    check("eval_lisp entget by handle", s == 200 and r.get("value") == 5, str(r)[:300])
+    s, r = ev('(ssget "_X" (list (cons 0 "CIRCLE") (cons 10 (list 72000 0 0))))')
+    check("eval_lisp selection set", s == 200 and (r.get("value") or {}).get("selection_set", 0) >= 1, str(r)[:300])
+    s, u = post(base, "undo")
+    s2, u2 = post(base, "undo")
+    s3, u3 = post(base, "undo")
+    _, p = post(base, "get_entity_properties", handles=[handle])
+    check("undo reverts eval_lisp calls one by one", s == s2 == s3 == 200 and "error" in (p.get("items") or [{}])[0], str(p)[:300])
+
+    for name, expr, code in [
+        ("unclosed form", "(+ 1 2", 400),
+        ("extra ')'", '(princ "x"))', 400),
+        ("unclosed string", '(strcat "abc)', 400),
+        ("command", '(command "_.LINE" (list 0 0) (list 1 1) "")', 400),
+        ("command-s", '(command-s "_.REGEN")', 400),
+        ("getpoint", '(getpoint "Pick: ")', 400),
+        ("interactive ssget", "(ssget)", 400),
+        ("empty", "  ", 400),
+    ]:
+        s, r = ev(expr)
+        check(f"eval_lisp {name} -> {code}", s == code, str(r)[:200])
+    s, r = ev('(strcat "(command " "x") ; (getpoint)')
+    check("eval_lisp: command words inside strings and comments are fine", s == 200 and r.get("value") == "(command x", str(r)[:300])
