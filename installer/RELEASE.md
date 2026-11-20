@@ -14,15 +14,19 @@
 Плагин работает внутри AutoCAD и включается только по вашей команде; связь идёт лишь внутри
 компьютера (localhost).
 
-**Новое в 0.5.0:**
-- **Файлы:** создать чертёж по шаблону, открыть (в том числе только для чтения), переключиться между
-  открытыми, сохранить, сохранить как DWG/DXF нужной версии (2018…2000), закрыть.
-- **Печать в PDF:** выбранные или все листы в один многостраничный PDF или по файлу на лист; модель — весь
-  чертёж или рамка. Листы печатаются со своими настройками.
-- **Внешние ссылки:** подключить (вставка или наложение), обновить, выгрузить, удалить, внедрить, сменить путь.
-- **Очистка и проверка:** удаление неиспользуемых слоёв, стилей, блоков (сначала показывается список) и аудит.
-- **Стандарты из шаблона:** перенос слоёв, типов линий, стилей и блоков из другого чертежа или шаблона.
-- Ничего не теряется молча: несохранённые изменения, существующие файлы и PDF — только по явному указанию.
+**Новое в 0.6.0:**
+- **Команды AutoCAD и AutoLISP — по вашему разрешению.** Ассистент может выполнить любую команду AutoCAD
+  с ответами на её запросы и вычислить выражение AutoLISP (в том числе вызвать ваши функции LISP) и
+  получить результат.
+- По умолчанию это **выключено**. Включается кнопкой **Commands** на панели **AI companion** (или командой
+  `MCPCOMMANDS`) после предупреждения; действует до закрытия AutoCAD, повторное нажатие выключает.
+- Опасные команды (выход из AutoCAD, закрытие чертежей, загрузка программ, запуск внешних программ) не
+  выполняются. Каждый вызов отменяется одним шагом.
+- Исправлено: если другая программа передала чертежу команду через COM, ассистент больше не зависает на
+  отмене изменений.
+
+*В 0.5.0:* создание, открытие, сохранение (в том числе в старые DWG и DXF) и закрытие чертежей; печать
+листов в PDF; внешние ссылки; очистка и аудит; перенос стандартов из шаблона.
 
 *В 0.4.0:*
 - **Ассистент видит чертёж:** снимок текущего вида, всего чертежа, листа, рамки или выбранных объектов —
@@ -59,6 +63,9 @@ Claude Desktop, Claude Code и Codex.
 Создание, открытие, сохранение (в том числе в старые версии DWG и DXF) и закрытие чертежей, печать листов
 в PDF, внешние ссылки, очистка, аудит, перенос стандартов из шаблона.
 
+**Команды и AutoLISP** (только с вашего разрешения)
+Любая команда AutoCAD с ответами на запросы и текстом командной строки; выражения AutoLISP с результатом.
+
 **Просмотр**
 Снимок вида в картинку (ассистент видит чертёж), показать всё / рамку / объекты, переход между листами.
 
@@ -70,10 +77,12 @@ Claude Desktop, Claude Code и Codex.
 Каждое изменение ассистента отменяется одним шагом, и отменяются только его изменения, а не ваши.
 Массовые изменения — только после подтверждения, с предварительным просмотром. Объекты на
 заблокированных слоях и заблокированные ячейки таблиц (в том числе связанные с Excel) не изменяются.
+Команды AutoCAD и AutoLISP ассистент выполняет только после вашего разрешения.
 
 **Управление**
-Панель **AI companion** на вкладке «Главная»: кнопки **Start**, **Stop**, **Status**
-(команды `MCPSTART`, `MCPSTOP`, `MCPSTATUS`).
+Панель **AI companion** на вкладке «Главная»: кнопки **Start**, **Stop**, **Status** и переключатель
+**Commands** (команды `MCPSTART`, `MCPSTOP`, `MCPSTATUS`, `MCPCOMMANDS`). Чтобы команды были разрешены
+всегда, без кнопки, добавьте `"allowCommands": true` в `%LOCALAPPDATA%\AcadMcpBridge\config.json`.
 
 ## Требования
 
@@ -130,15 +139,19 @@ and the assistant reads the drawing and makes the changes through the plugin's t
 The plugin runs inside AutoCAD and starts only on your command; it talks only within this
 computer (localhost).
 
-**New in 0.5.0:**
-- **Files:** create a drawing from a template, open (read-only too), switch between open drawings, save,
-  save as DWG/DXF of a chosen version (2018…2000), close.
-- **PDF printing:** chosen or all layouts into one multi-page PDF or one file per layout; model — the whole
-  drawing or a window. Layouts print with their own page setup.
-- **External references:** attach (or overlay), reload, unload, detach, bind, change the path.
-- **Cleanup and check:** purge of unused layers, styles, blocks (the list is shown first) and audit.
-- **Standards from a template:** copy layers, linetypes, styles and blocks from another drawing or template.
-- Nothing is lost silently: unsaved changes, existing files and PDFs only on explicit request.
+**New in 0.6.0:**
+- **AutoCAD commands and AutoLISP — with your permission.** The assistant can run any AutoCAD command
+  with the answers to its prompts and evaluate an AutoLISP expression (your own LISP functions too) and
+  get the result.
+- This is **off** by default. Turn it on with the **Commands** button on the **AI companion** panel (or the
+  `MCPCOMMANDS` command) after a warning; it lasts until AutoCAD is closed, pressing again turns it off.
+- Dangerous commands (quitting AutoCAD, closing drawings, loading programs, starting external programs)
+  are refused. Each call is undone in one step.
+- Fixed: after another program sent a command to a drawing through COM, undoing the assistant's changes
+  no longer hangs.
+
+*In 0.5.0:* creating, opening, saving (older DWG versions and DXF too) and closing drawings; printing
+layouts to PDF; external references; purge and audit; standards from a template.
 
 *In 0.4.0:*
 - **The assistant sees the drawing:** a picture of the current view, the whole drawing, a layout, a window
@@ -175,6 +188,9 @@ new layers and styles.
 Creating, opening, saving (older DWG versions and DXF too) and closing drawings, printing layouts to PDF,
 external references, purge, audit, standards from a template.
 
+**Commands and AutoLISP** (only with your permission)
+Any AutoCAD command with the answers to its prompts and the command-line text; AutoLISP expressions with their result.
+
 **Viewing**
 A picture of the view (the assistant sees the drawing), zoom to extents / window / objects, switching layouts.
 
@@ -185,11 +201,13 @@ dimension settings, move, copy, rotate, scale, mirror, delete, layer management.
 **Safety**
 Every change the assistant makes is undone in one step, and only its own changes are undone, never
 yours. Bulk changes need confirmation and can be previewed first. Objects on locked layers and
-locked table cells (including cells linked to Excel) are never changed.
+locked table cells (including cells linked to Excel) are never changed. The assistant runs AutoCAD
+commands and AutoLISP only after you allow it.
 
 **Control**
-The **AI companion** panel on the **Home** tab: **Start**, **Stop**, **Status** buttons
-(commands `MCPSTART`, `MCPSTOP`, `MCPSTATUS`).
+The **AI companion** panel on the **Home** tab: **Start**, **Stop**, **Status** buttons and the **Commands**
+toggle (commands `MCPSTART`, `MCPSTOP`, `MCPSTATUS`, `MCPCOMMANDS`). To allow commands always, without the
+button, add `"allowCommands": true` to `%LOCALAPPDATA%\AcadMcpBridge\config.json`.
 
 ## Requirements
 

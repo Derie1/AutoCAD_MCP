@@ -135,6 +135,9 @@ def _after_com_send_command(base: str, post: Callable, count: Callable, check: C
     Runs in a drawing of its own: re-activation needs a second open drawing."""
     _, info = post(base, "get_document_info")
     home = info.get("name")
+    _, sv = post(base, "get_system_variable", names=["LOGFILEPATH"])
+    log_dir = (sv.get("values") or {}).get("LOGFILEPATH") or ""
+    logs_before = set(glob.glob(os.path.join(log_dir, "*.log"))) if os.path.isdir(log_dir) else set()
     s, d = post(base, "new_document")
     if s != 200:
         check("new drawing for the COM SendCommand check", False, str(d)[:200])
@@ -154,6 +157,9 @@ def _after_com_send_command(base: str, post: Callable, count: Callable, check: C
         check("run_command after COM SendCommand works", s == 200 and r.get("completed") is True, str(r)[:200])
         _, now = post(base, "get_document_info")
         check("the drawing stays active after re-activation", now.get("name") == d.get("name"), str(now.get("name")))
+        time.sleep(1)  # a log AutoCAD still holds is deleted when it is idle
+        left = set(glob.glob(os.path.join(log_dir, "*.log"))) - logs_before if log_dir else set()
+        check("no command-line log files left with two drawings open", not left, str(sorted(left)))
     finally:
         post(base, "close_document", discard_changes=True)
         if home:

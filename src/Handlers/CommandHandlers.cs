@@ -240,11 +240,12 @@ internal sealed class CommandLog : IDisposable
     private readonly string? _file;
     private readonly long _start;
     private readonly bool _existed;
+    private readonly HashSet<string>? _folderBefore;
     private bool _ended;
 
-    private CommandLog(bool own, string? file, long start, bool existed)
+    private CommandLog(bool own, string? file, long start, bool existed, HashSet<string>? folderBefore)
     {
-        _own = own; _file = file; _start = start; _existed = existed;
+        _own = own; _file = file; _start = start; _existed = existed; _folderBefore = folderBefore;
     }
 
     public static CommandLog Begin()
@@ -256,18 +257,26 @@ internal sealed class CommandLog : IDisposable
             string before = Convert.ToString(AcApp.GetSystemVariable("LOGFILENAME")) ?? "";
             bool existed = before.Length > 0 && File.Exists(before);
             long start = existed ? new FileInfo(before).Length : 0;
+            // Switching the log on opens a log for every open drawing (measured with several drawings open):
+            // note the folder's files to delete the new ones afterwards.
+            HashSet<string>? folder = userLog ? null : LogsIn(Path.GetDirectoryName(before));
             if (!userLog) AcApp.SetSystemVariable("LOGFILEMODE", 1);
             string file = Convert.ToString(AcApp.GetSystemVariable("LOGFILENAME")) ?? "";
             if (!file.Equals(before, StringComparison.OrdinalIgnoreCase)) { existed = false; start = 0; }
             if (!userLog) Remember(file, existed, start);
-            return new CommandLog(!userLog, file, start, existed);
+            return new CommandLog(!userLog, file, start, existed, folder);
         }
         catch (Exception ex)
         {
             Log.Error("command-line log not available", ex);
-            return new CommandLog(false, null, 0, true);
+            return new CommandLog(false, null, 0, true, null);
         }
     }
+
+    private static HashSet<string> LogsIn(string? dir) =>
+        !string.IsNullOrEmpty(dir) && Directory.Exists(dir)
+            ? Directory.GetFiles(dir, "*.log").ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Stops logging (if it was started here) and returns the text written during the call.</summary>
     public string End()
@@ -278,16 +287,23 @@ internal sealed class CommandLog : IDisposable
         try
         {
             if (_own) AcApp.SetSystemVariable("LOGFILEMODE", 0);
-            if (_file == null || !File.Exists(_file)) return "";
-            using (var fs = new FileStream(_file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            if (_file != null && File.Exists(_file))
             {
+                using var fs = new FileStream(_file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 fs.Seek(Math.Min(_start, fs.Length), SeekOrigin.Begin);
                 using var reader = new StreamReader(fs, Encoding.Default);
                 text = reader.ReadToEnd();
             }
         }
         catch (Exception ex) { Log.Error("command-line log", ex); }
-        if (_own && _file != null) CleanUp(_file, _existed, _start);
+        if (_own && _file != null)
+        {
+            CleanUp(_file, _existed, _start);
+            if (_folderBefore != null)
+                foreach (var f in LogsIn(Path.GetDirectoryName(_file)))
+                    if (!_folderBefore.Contains(f) && !f.Equals(_file, StringComparison.OrdinalIgnoreCase))
+                        CleanUp(f, false, 0, note: false); // the logs of the other open drawings
+        }
         return text;
     }
 
@@ -295,7 +311,7 @@ internal sealed class CommandLog : IDisposable
     /// Leaves the user's log folder as it was: deletes the log file it created or cuts the user's file back.
     /// AutoCAD may still hold the file right after LOGFILEMODE = 0: then try again when AutoCAD is idle.
     /// </summary>
-    private static void CleanUp(string file, bool existed, long start, int attempt = 0)
+    private static void CleanUp(string file, bool existed, long start, int attempt = 0, bool note = true)
     {
         try
         {
@@ -304,12 +320,12 @@ internal sealed class CommandLog : IDisposable
                 if (!existed) File.Delete(file);
                 else using (var fs = new FileStream(file, FileMode.Open, FileAccess.Write, FileShare.ReadWrite)) fs.SetLength(start);
             }
-            try { File.Delete(MarkerFile); } catch { }
+            if (note) try { File.Delete(MarkerFile); } catch { }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             if (attempt >= 20) { Log.Error($"cannot clean up the command-line log {file}", ex); return; }
-            void Once(object? s, EventArgs e) { AcApp.Idle -= Once; CleanUp(file, existed, start, attempt + 1); }
+            void Once(object? s, EventArgs e) { AcApp.Idle -= Once; CleanUp(file, existed, start, attempt + 1, note); }
             AcApp.Idle += Once;
         }
     }
