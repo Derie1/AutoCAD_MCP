@@ -20,6 +20,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SERVER = ROOT / "bin" / "Release" / "Server" / "acad_mcp_server.dll"
 WORK = Path(tempfile.gettempdir()) / "acadmcp_batch_mcp"
+# The server and its consoles read this settings file instead of the user's config.json (ACAD_MCP_CONFIG).
+CONFIG = Path(tempfile.gettempdir()) / "acadmcp_batch_mcp_config.json"
+
+
+def allow_commands(on: bool) -> None:
+    CONFIG.write_text(json.dumps({"allowCommands": on}), encoding="utf-8")
 
 passed: list[str] = []
 failed: list[str] = []
@@ -297,6 +303,51 @@ async def plots(session, year: str) -> None:
         shutil.rmtree(pdfs, ignore_errors=True)
 
 
+async def commands(session, year: str) -> None:
+    """run_command / eval_lisp in a batch: only with allowCommands in the settings file; snaps off; Enter ends a wait."""
+    print(f"== commands and AutoLISP (AutoCAD {year})")
+    folder = prepare(year)
+    (folder / "broken.dwg").unlink()
+    out = WORK.parent / "acadmcp_batch_mcp_cmd"
+    shutil.rmtree(out, ignore_errors=True)
+    steps = [
+        {"tool": "run_command", "args": {"command": "_.LINE", "inputs": [[100, 100], [110, 110], ""]}},
+        {"tool": "run_command", "args": {"command": "_.CIRCLE", "inputs": [[0, 0], 5]}},
+        {"tool": "run_command", "args": {"command": "_.LINE", "inputs": [[0, 0], [10, 10]]}},
+        {"tool": "eval_lisp", "args": {"expression": '(princ "hi") (+ 1 2)'}},
+    ]
+    try:
+        allow_commands(False)
+        ok, text = await call(session, "batch_run", {"files": [str(folder / "a.dwg")], "steps": steps, "save": "copy",
+                                                     "output_folder": str(out), "autocad_version": year})
+        check("commands refused while allowCommands is false", not ok and "allowCommands" in str(text), str(text)[:200])
+        allow_commands(True)
+        ok, text = await call(session, "batch_run", {"files": [str(folder / "a.dwg")], "steps": steps, "autocad_version": year})
+        check("commands need a save choice", not ok and "where to save" in str(text), str(text)[:200])
+        ok, r = await call(session, "batch_run", {"files": [str(folder / "a.dwg")], "steps": steps, "save": "copy",
+                                                  "output_folder": str(out), "autocad_version": year})
+        f = r["files"][0] if ok else {}
+        st = f.get("steps", [])
+        check("commands: ran and saved", ok and len(st) == 4 and all(x["ok"] for x in st) and f.get("saved_to"), str(r)[:400])
+        if len(st) == 4:
+            check("run_command completed", st[1]["result"]["completed"] is True, json.dumps(st[1])[:300])
+            check("waiting command ended with Enter, noted", st[2]["result"]["cancelled_waiting_for_input"] is True
+                  and "Enter" in (st[2]["result"].get("note") or "")
+                  and st[2]["result"]["last_prompt"].startswith("Specify next point"), json.dumps(st[2])[:400])
+            check("eval_lisp value and output", st[3]["result"]["value"] == 3 and st[3]["result"]["output"] == "hi",
+                  json.dumps(st[3])[:300])
+        ok, r = await call(session, "batch_run", {"files": [str(out / "a.dwg")], "autocad_version": year, "steps": [
+            {"tool": "find_entities", "args": {"types": ["LINE", "CIRCLE"], "layers": ["0"], "space": "model"}}]})
+        bounds = sorted((tuple(e["bounds"]["min"][:2]), tuple(e["bounds"]["max"][:2]))
+                        for e in (r["files"][0]["steps"][0]["result"]["items"] if ok else [])
+                        if e["type"] in ("LINE", "CIRCLE") and int(e["handle"], 16) > 0x3400)
+        check("points are not snapped to nearby objects", bounds == [((-5, -5), (5, 5)), ((0, 0), (10, 10)), ((100, 100), (110, 110))],
+              str(bounds))
+    finally:
+        allow_commands(False)
+        shutil.rmtree(out, ignore_errors=True)
+
+
 async def refusals(session) -> None:
     print("== refusals (no console starts)")
     folder = WORK if WORK.exists() else Path(tempfile.gettempdir())
@@ -315,8 +366,12 @@ async def refusals(session) -> None:
         ("bad save value", {"folder": str(folder), "save": "somewhere",
                             "steps": [{"tool": "create_layer", "args": {"name": "X"}}]}, "must be"),
         ("zoom refused", {"folder": str(folder), "steps": [{"tool": "zoom"}]}, "cannot run in a batch"),
-        ("run_command refused", {"folder": str(folder), "steps": [{"tool": "run_command", "args": {"command": "REGEN"}}]},
-         "cannot run in a batch"),
+        ("run_command refused without allowCommands", {"folder": str(folder), "save": "copy", "output_folder": str(folder / "o"),
+                                                        "steps": [{"tool": "run_command", "args": {"command": "REGEN"}}]},
+         "allowCommands"),
+        ("eval_lisp refused without allowCommands", {"folder": str(folder), "steps": [{"tool": "eval_lisp",
+                                                                                      "args": {"expression": "(+ 1 2)"}}]},
+         "allowCommands"),
         ("unknown tool", {"folder": str(folder), "steps": [{"tool": "no_such"}]}, "no such tool"),
         ("no steps", {"folder": str(folder), "steps": []}, "non-empty"),
         ("no files given", {"steps": [{"tool": "list_layers"}]}, "folder"),
@@ -336,7 +391,8 @@ async def main_async(years: list[str]) -> None:
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
-    params = StdioServerParameters(command="dotnet", args=[str(SERVER)], env=dict(os.environ))
+    allow_commands(False)
+    params = StdioServerParameters(command="dotnet", args=[str(SERVER)], env={**os.environ, "ACAD_MCP_CONFIG": str(CONFIG)})
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -350,6 +406,7 @@ async def main_async(years: list[str]) -> None:
                 await run_year(session, year)
                 await writes(session, year)
                 await plots(session, year)
+                await commands(session, year)
             if WORK.exists():
                 await open_in_autocad(session, next(y for y in reversed(years) if sample(y).exists()))
             await refusals(session)
@@ -366,6 +423,7 @@ def main() -> int:
         asyncio.run(main_async(args.years))
     finally:
         shutil.rmtree(WORK, ignore_errors=True)
+        CONFIG.unlink(missing_ok=True)
     print(f"\n{len(passed)}/{len(passed) + len(failed)} passed")
     return 0 if not failed else 1
 

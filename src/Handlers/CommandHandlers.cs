@@ -57,7 +57,8 @@ internal static class CommandHandlers
     /// <summary>A command of the user's kind is running (not the command-context wrapper EXECUTEFUNCTION).</summary>
     private static bool Active(Document doc) =>
         !string.IsNullOrEmpty(doc.CommandInProgress)
-        && !doc.CommandInProgress.Equals("EXECUTEFUNCTION", StringComparison.OrdinalIgnoreCase);
+        && !doc.CommandInProgress.Equals("EXECUTEFUNCTION", StringComparison.OrdinalIgnoreCase)
+        && !(Batch.IsConsole && doc.CommandInProgress.Equals("MCPBATCH", StringComparison.OrdinalIgnoreCase));
 
     private static async Task<JsonObject> Run(Document doc, string command, List<object> tokens)
     {
@@ -75,6 +76,10 @@ internal static class CommandHandlers
             ["error"] = failure?.Message,
             ["command_line"] = Tail(string.Join("\n", r.Body), 4000),
             ["still_active"] = r.StillActive,
+            ["note"] = Batch.IsConsole && r.Pending != null
+                ? "in a batch a command left waiting for input is ended with Enter (no Esc there): what it drew so far " +
+                  "stays, and a prompt with a default takes the default; give all the answers in inputs"
+                : null,
         };
     }
 
@@ -97,12 +102,27 @@ internal static class CommandHandlers
         List<(string Name, object Old)>? dialogs = null;
         // System variable changes are recorded by UNDO: switch the dialogs off and back on INSIDE the
         // command's UNDO group, so undoing the call does not leave them switched off.
-        void DialogsOff() => dialogs = SysVars.Set(("FILEDIA", 0), ("CMDDIA", 0));
-        void DialogsBack() { if (dialogs != null) { SysVars.Restore(dialogs); dialogs = null; } }
+        // The console has no dialogs (and its variables must not reach the shared restore file of the AutoCAD window).
+        // In a batch, object snaps go off instead: the console has no screen, its snap aperture is huge and every
+        // point typed in 'inputs' jumps to some nearby object (measured: a line from 100,100 came out at 0,0).
+        object? osmode = null;
+        void DialogsOff()
+        {
+            if (!Batch.IsConsole) { dialogs = SysVars.Set(("FILEDIA", 0), ("CMDDIA", 0)); return; }
+            osmode = AcApp.GetSystemVariable("OSMODE");
+            AcApp.SetSystemVariable("OSMODE", Convert.ToInt32(osmode) | 16384);
+        }
+        void DialogsBack()
+        {
+            if (dialogs != null) { SysVars.Restore(dialogs); dialogs = null; }
+            if (osmode != null) { try { AcApp.SetSystemVariable("OSMODE", osmode); } catch { } osmode = null; }
+        }
         UndoTracker.BeginOwnCommands();
         try
         {
-            await CommandContext.Run(doc, async () =>
+            // In a batch the call already runs inside the MCPBATCH command: no command context to enter.
+            Func<Document, Func<Task>, Task> inContext = Batch.IsConsole ? (_, body) => body() : CommandContext.Run;
+            await inContext(doc, async () =>
             {
                 started = true;
                 await ed.CommandAsync("_.UNDO", "_BEgin");
@@ -121,9 +141,8 @@ internal static class CommandHandlers
             {
                 // The command still waits for input: cancel it like Esc, then close the UNDO group.
                 // (A "\x03" passed to CommandAsync is only another answer, not a cancel.)
-                doc.SendStringToExecute("\x03\x03", true, false, false);
-                for (int i = 0; i < 200 && Active(doc); i++) await Task.Delay(50);
-                await CommandContext.Run(doc, async () =>
+                await Cancel(doc);
+                await inContext(doc, async () =>
                 {
                     DialogsBack();
                     await ed.CommandAsync("_.UNDO", "_End");
@@ -160,6 +179,28 @@ internal static class CommandHandlers
             if (c >= 0) body = body.Take(c).ToList(); // drop the cancellation echo itself
         }
         return new Outcome(pending, failure, body, lastPrompt, Active(doc) ? doc.CommandInProgress : null);
+    }
+
+    /// <summary>Cancels a command left waiting for input (like Esc).</summary>
+    private static async Task Cancel(Document doc)
+    {
+        if (Batch.IsConsole)
+        {
+            await BatchCancel(doc);
+            return;
+        }
+        doc.SendStringToExecute("\x03\x03", true, false, false);
+        for (int i = 0; i < 200 && Active(doc); i++) await Task.Delay(50);
+    }
+
+    /// <summary>
+    /// Batch: inside MCPBATCH there is no Esc (SendStringToExecute would run after the whole script). The
+    /// waiting command gets Enter, which ends most commands (measured: LINE ends, the drawn segments stay);
+    /// a prompt with a default takes the default. At most 10 times.
+    /// </summary>
+    private static async Task BatchCancel(Document doc)
+    {
+        for (int i = 0; i < 10 && Active(doc); i++) await doc.Editor.CommandAsync("");
     }
 
     internal static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
@@ -336,6 +377,7 @@ internal sealed class CommandLog : IDisposable
 
     private static void Remember(string file, bool existed, long start)
     {
+        if (Batch.IsConsole) return; // the console's log is in its own work folder, deleted afterwards
         try
         {
             Directory.CreateDirectory(BridgeConfig.Folder);

@@ -14,7 +14,9 @@ internal sealed class BridgeConfig
 
     public static string Folder { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AcadMcpBridge");
-    public static string ConfigPath => Path.Combine(Folder, "config.json");
+    /// <summary>ACAD_MCP_CONFIG: another settings file (tests use it so that the user's file stays untouched).</summary>
+    public static string ConfigPath =>
+        Environment.GetEnvironmentVariable("ACAD_MCP_CONFIG") is { Length: > 0 } other ? other : Path.Combine(Folder, "config.json");
 
     public int Port { get; private init; } = DefaultPort;
     public string Token { get; private init; } = "";

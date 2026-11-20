@@ -46,8 +46,6 @@ internal static class Batch
             ["get_selection"] = NoScreen + " and no selection",
             ["set_selection"] = NoScreen + " and no selection",
             ["undo"] = "a batch has no undo: a drawing changes on disk only when the batch saves it",
-            ["run_command"] = "AutoCAD commands are not available in batches yet",
-            ["eval_lisp"] = "AutoLISP is not available in batches yet",
         };
 
     /// <summary>Tools that run AutoCAD commands in a batch (asynchronously, inside MCPBATCH).</summary>
@@ -55,6 +53,8 @@ internal static class Batch
         new Dictionary<string, Func<JsonObject, Task<JsonObject>>>(StringComparer.OrdinalIgnoreCase)
         {
             ["audit"] = Handlers.MaintenanceHandlers.AuditInBatch,
+            ["run_command"] = Handlers.CommandHandlers.RunCommand,  // only when config.json allows commands
+            ["eval_lisp"] = Handlers.LispHandlers.EvalLisp,
         };
 
     /// <summary>MCPBATCH: runs the job on the drawing the console opened.</summary>

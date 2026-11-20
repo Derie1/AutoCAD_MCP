@@ -45,8 +45,6 @@ internal sealed class BatchRunner(JsonArray tools)
         ["get_selection"] = "a batch has no screen or selection",
         ["set_selection"] = "a batch has no screen or selection",
         ["undo"] = "a batch has no undo",
-        ["run_command"] = "AutoCAD commands are not available in batches yet",
-        ["eval_lisp"] = "AutoLISP is not available in batches yet",
         [RunTool] = "a batch cannot start another batch",
         [StatusTool] = "a batch cannot start another batch",
     };
@@ -130,6 +128,16 @@ internal sealed class BatchRunner(JsonArray tools)
             if (NotInBatch.TryGetValue(tool, out string? why)) throw new ToolException($"{where} cannot run in a batch: {why}.");
             var schema = tools.FirstOrDefault(t => t?["name"]?.ToString() == tool)
                 ?? throw new ToolException($"{where}: there is no such tool.");
+            if (tool is "run_command" or "eval_lisp")
+            {
+                if (!CommandsAllowed(out string config))
+                    throw new ToolException($"{where}: AutoCAD commands and AutoLISP run in batches only when the user has set " +
+                        $"\"allowCommands\": true in {config}. The Commands button in AutoCAD does not apply to batches, and only " +
+                        "the user can change this setting (tell the user; do not edit the file yourself). Use the dedicated " +
+                        "tools instead where they can do the job. Nothing was run.");
+                writes = true; // a command or an expression can change the drawing
+                continue;
+            }
             if (ReadTools.Contains(tool)) continue;
             if (tool == "audit" && args["fix"]?.GetValue<bool>() != true) continue;
             var dryRun = schema["inputSchema"]?["properties"]?["dry_run"];
@@ -140,6 +148,19 @@ internal sealed class BatchRunner(JsonArray tools)
     }
 
     private enum SaveMode { None, Copy, InPlace }
+
+    /// <summary>"allowCommands" in the plugin's config.json (ACAD_MCP_CONFIG overrides the path, as in the plugin).</summary>
+    private static bool CommandsAllowed(out string path)
+    {
+        path = Environment.GetEnvironmentVariable("ACAD_MCP_CONFIG") is { Length: > 0 } other ? other
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AcadMcpBridge", "config.json");
+        try
+        {
+            return File.Exists(path) && JsonNode.Parse(File.ReadAllText(path)) is JsonObject o
+                && o["allowCommands"] is JsonValue v && v.TryGetValue(out bool allowed) && allowed;
+        }
+        catch (Exception) { return false; }
+    }
 
     /// <summary>A file's path below 'folder' (subfolders are kept in output folders), else its name.</summary>
     private static string Relative(string file, string? root) =>
