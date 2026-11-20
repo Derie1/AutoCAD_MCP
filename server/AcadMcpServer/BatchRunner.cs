@@ -70,16 +70,21 @@ internal sealed class BatchRunner(JsonArray tools)
     public async Task<JsonObject> RunAsync(JsonObject a, CancellationToken serverShutdown)
     {
         var steps = ParseSteps(a);
-        CheckSteps(steps);
+        bool writes = CheckSteps(steps);
         bool goOn = Bool(a, "continue_on_error");
         var files = ListFiles(a);
+        var targets = SaveTargets(a, files, writes, out SaveMode mode);
         var console = PickConsole(Str(a, "autocad_version"));
         int parallel = Int(a, "parallel", DefaultParallel(), 1, 8);
         int fileTimeout = Int(a, "file_timeout_seconds", 300, 10, 3600);
         int wait = Int(a, "wait_seconds", 600, 0, 600);
 
         string id = $"b{DateTime.Now:HHmmss}-{Interlocked.Increment(ref _counter)}";
-        var job = new Job(id, files, console, parallel, Path.Combine(Path.GetTempPath(), "acadmcp_batch", id));
+        var job = new Job(id, files, console, parallel, Path.Combine(Path.GetTempPath(), "acadmcp_batch", id))
+        {
+            Mode = mode,
+            Targets = targets,
+        };
         foreach (var old in _jobs.Values.Where(j => j.Finished).OrderBy(j => j.Started).SkipLast(KeptJobs - 1).ToList())
             _jobs.TryRemove(old.Id, out _);
         _jobs[id] = job;
@@ -111,9 +116,10 @@ internal sealed class BatchRunner(JsonArray tools)
         return steps;
     }
 
-    /// <summary>Throws for a step that cannot run in a batch, or that would change the drawing.</summary>
-    private void CheckSteps(JsonArray steps)
+    /// <summary>Throws for a step that cannot run in a batch; true when a step changes the drawings.</summary>
+    private bool CheckSteps(JsonArray steps)
     {
+        bool writes = false;
         for (int i = 0; i < steps.Count; i++)
         {
             string tool = steps[i]!["tool"]!.ToString();
@@ -126,9 +132,65 @@ internal sealed class BatchRunner(JsonArray tools)
             if (tool == "audit" && args["fix"]?.GetValue<bool>() != true) continue;
             var dryRun = schema["inputSchema"]?["properties"]?["dry_run"];
             if (dryRun != null && (args["dry_run"] ?? dryRun["default"])?.GetValue<bool>() == true) continue;
-            throw new ToolException($"{where} would change the drawings, and batch_run only reads drawings in this version " +
-                "(changing and saving comes next). Use a reading tool, audit without fix, or dry_run: true to preview.");
+            writes = true;
         }
+        return writes;
+    }
+
+    private enum SaveMode { None, Copy, InPlace }
+
+    /// <summary>
+    /// Where each drawing is saved when the steps change it (null: not saved). Changing steps need an explicit
+    /// choice that the model asks the user for: copies in an output folder, or over the originals with .bak.
+    /// </summary>
+    private static string?[] SaveTargets(JsonObject a, List<string> files, bool writes, out SaveMode mode)
+    {
+        mode = SaveMode.None;
+        var targets = new string?[files.Count];
+        string? save = Str(a, "save");
+        if (!writes) return targets; // nothing changes: opened read-only, nothing saved
+        if (save == null)
+            throw new ToolException("The steps change the drawings, and the user has not said where to save them. Ask the user, " +
+                "then call again with either save: \"copy\" and output_folder (changed drawings are saved there, the originals " +
+                "stay as they are) or save: \"in_place\" with confirm: true (the originals are overwritten, the previous " +
+                "version of each stays next to it as .bak). Nothing was run.");
+        if (save == "in_place")
+        {
+            if (!Bool(a, "confirm"))
+                throw new ToolException("save: \"in_place\" overwrites the original drawings (each keeps a .bak); it needs confirm: true " +
+                    "after the user agreed. Nothing was run.");
+            mode = SaveMode.InPlace;
+            for (int i = 0; i < files.Count; i++) targets[i] = files[i];
+            return targets;
+        }
+        if (save != "copy") throw new ToolException("'save' must be \"copy\" or \"in_place\"");
+
+        string output = Str(a, "output_folder") ?? throw new ToolException("save: \"copy\" needs output_folder (a full path)");
+        if (!Path.IsPathFullyQualified(output)) throw new ToolException($"output_folder '{output}' is not a full path");
+        output = Path.GetFullPath(output);
+        string? root = Str(a, "folder") is { Length: > 0 } f ? Path.GetFullPath(f) : null;
+        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var existing = new List<string>();
+        for (int i = 0; i < files.Count; i++)
+        {
+            // Under 'folder' the subfolders are kept (recursive), other files go to output_folder itself.
+            string rel = root != null && files[i].StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetRelativePath(root, files[i]) : Path.GetFileName(files[i]);
+            string target = Path.GetFullPath(Path.Combine(output, rel));
+            if (string.Equals(target, files[i], StringComparison.OrdinalIgnoreCase))
+                throw new ToolException($"output_folder is the drawings' own folder ('{files[i]}' would overwrite itself); " +
+                    "choose another folder, or save: \"in_place\" with confirm: true");
+            if (seen.TryGetValue(target, out string? other))
+                throw new ToolException($"'{other}' and '{files[i]}' would both be saved as '{target}'; give them separately");
+            seen[target] = files[i];
+            if (File.Exists(target)) existing.Add(target);
+            targets[i] = target;
+        }
+        if (existing.Count > 0 && !Bool(a, "overwrite"))
+            throw new ToolException($"{existing.Count} file(s) already exist in output_folder, e.g. '{existing[0]}'; ask the user, " +
+                "then pass overwrite: true to replace them, or choose an empty folder. Nothing was run.");
+        mode = SaveMode.Copy;
+        return targets;
     }
 
     private static List<string> ListFiles(JsonObject a)
@@ -235,6 +297,8 @@ internal sealed class BatchRunner(JsonArray tools)
         public Task Task { get; set; } = Task.CompletedTask;
         public string? Failure { get; set; }
         public bool Finished => Ended != null;
+        public SaveMode Mode { get; init; }
+        public string?[] Targets { get; init; } = [];
     }
 
     private async Task RunJob(Job job, JsonArray steps, bool goOn, int fileTimeout, CancellationToken serverShutdown)
@@ -251,7 +315,7 @@ internal sealed class BatchRunner(JsonArray tools)
             {
                 try { await gate.WaitAsync(linked.Token); }
                 catch (OperationCanceledException) { job.Results[i] = Skipped(file, "cancelled before it started"); return; }
-                try { job.Results[i] = await RunFile(job, i, file, script, steps, goOn, fileTimeout, linked.Token); }
+                try { job.Results[i] = Unwritable(job, file) ?? await RunFile(job, i, file, script, steps, goOn, fileTimeout, linked.Token); }
                 catch (Exception ex) { job.Results[i] = Failed(file, ex.Message); }
                 finally { gate.Release(); }
             }).ToList();
@@ -279,6 +343,12 @@ internal sealed class BatchRunner(JsonArray tools)
             ["continue_on_error"] = goOn,
             ["result"] = resultFile,
         };
+        string? target = job.Targets[index];
+        if (target != null)
+        {
+            plan["save_as"] = target;
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        }
         File.WriteAllText(jobFile, plan.ToJsonString(Json.Options), new UTF8Encoding(false));
 
         // /isolate: the console gets its own user profile. Without it the console writes its working folder
@@ -288,8 +358,9 @@ internal sealed class BatchRunner(JsonArray tools)
         Directory.CreateDirectory(profile);
         var psi = new ProcessStartInfo(job.Console.Exe)
         {
-            // Read-only: this version never saves, and a drawing open in AutoCAD can still be read.
-            Arguments = $"/i \"{file}\" /s \"{script}\" /readonly /isolate acadmcp_batch \"{profile}\"",
+            // Read-only when nothing is saved: then a drawing open in AutoCAD can still be read.
+            Arguments = $"/i \"{file}\" /s \"{script}\"{(job.Mode == SaveMode.None ? " /readonly" : "")} " +
+                        $"/isolate acadmcp_batch \"{profile}\"",
             WorkingDirectory = dir, // the console writes its command-line log here
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -309,12 +380,17 @@ internal sealed class BatchRunner(JsonArray tools)
             if (File.Exists(ready)) ProfileGate.Release();
             else held = ProfileGate;
         }
+        // Opened for writing, AutoCAD puts lock files (.dwl, .dwl2) next to the drawing; a stopped console leaves them.
+        string[] locks = [Path.ChangeExtension(file, ".dwl"), Path.ChangeExtension(file, ".dwl2")];
+        bool[] hadLock = locks.Select(File.Exists).ToArray();
         try
         {
             return await Start(psi, file, resultFile, timeoutSeconds, sw, ct, () =>
             {
                 if (held != null && Directory.Exists(Path.Combine(profile, "Roaming")))
                     try { File.WriteAllText(ready, DateTime.Now.ToString("s")); } catch (IOException) { }
+                for (int k = 0; k < locks.Length; k++)
+                    if (!hadLock[k] && File.Exists(locks[k])) try { File.Delete(locks[k]); } catch (IOException) { }
             });
         }
         finally { held?.Release(); }
@@ -357,6 +433,9 @@ internal sealed class BatchRunner(JsonArray tools)
             o["ok"] = r["ok"]?.GetValue<bool>() == true;
             if (r["error"] != null) { o["code"] = r["code"]?.DeepClone(); o["error"] = r["error"]?.DeepClone(); }
             o["steps"] = r["steps"]?.DeepClone();
+            foreach (string key in new[] { "changed", "saved_to", "version", "backup", "save_error" })
+                if (r[key] != null) o[key] = r[key]!.DeepClone();
+            if (o["save_error"] != null) o["ok"] = false;
         }
         else
         {
@@ -375,6 +454,24 @@ internal sealed class BatchRunner(JsonArray tools)
 
     private static JsonObject Failed(string file, string error) => new() { ["file"] = file, ["ok"] = false, ["error"] = error };
     private static JsonObject Skipped(string file, string why) => new() { ["file"] = file, ["ok"] = false, ["skipped"] = why };
+
+    /// <summary>When the drawing will be changed: a read-only or locked (open in AutoCAD, by another user) file is skipped.</summary>
+    private static JsonObject? Unwritable(Job job, string file)
+    {
+        if (job.Mode == SaveMode.None) return null;
+        if (File.GetAttributes(file).HasFlag(FileAttributes.ReadOnly))
+            return Skipped(file, "the file is read-only (file attribute); it was not changed");
+        try
+        {
+            using var fs = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Skipped(file, "the file is in use (open in AutoCAD or by another user or program); close it and run the batch " +
+                "again for this file; it was not changed");
+        }
+    }
 
     // ---------------------------------------------------------------- batch_status and the report
 
@@ -418,6 +515,9 @@ internal sealed class BatchRunner(JsonArray tools)
             ["ok_files"] = done.Count(r => r!["ok"]?.GetValue<bool>() == true),
             ["failed_files"] = done.Count(r => r!["ok"]?.GetValue<bool>() != true && r!["skipped"] == null),
             ["skipped_files"] = done.Count(r => r!["skipped"] != null),
+            ["changed_files"] = done.Count(r => r!["changed"]?.GetValue<bool>() == true),
+            ["saved_files"] = done.Count(r => r!["saved_to"] is JsonValue),
+            ["save"] = job.Mode switch { SaveMode.Copy => "copy", SaveMode.InPlace => "in_place", _ => "none (read-only)" },
             ["elapsed_s"] = Math.Round(((job.Ended ?? DateTime.Now) - job.Started).TotalSeconds, 1),
         };
         if (job.Failure != null) o["error"] = job.Failure;

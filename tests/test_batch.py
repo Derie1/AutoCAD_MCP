@@ -189,15 +189,94 @@ async def open_in_autocad(session, year: str) -> None:
         bridge("close_document", path=str(path), discard_changes=True)
 
 
+def header(path: Path) -> bytes:
+    return path.read_bytes()[:6]
+
+
+async def writes(session, year: str) -> None:
+    """Changing steps: copies to an output folder, in place with .bak, skipped files, no save after a failed step."""
+    print(f"== changing drawings (AutoCAD {year})")
+    folder = prepare(year)
+    (folder / "broken.dwg").unlink()
+    version = header(sample(year))
+    out = WORK.parent / "acadmcp_batch_mcp_out"
+    shutil.rmtree(out, ignore_errors=True)
+    change = [{"tool": "create_layer", "args": {"name": "MCP_BATCH", "color": 3}},
+              {"tool": "create_line", "args": {"start": [0, 0], "end": [10, 10], "layer": "MCP_BATCH"}}]
+    try:
+        ok, r = await call(session, "batch_run", {"folder": str(folder), "recursive": True, "steps": change,
+                                                  "save": "copy", "output_folder": str(out), "autocad_version": year})
+        check("copy: 4 drawings changed and saved", ok and r["saved_files"] == 4 and r["changed_files"] == 4
+              and r["save"] == "copy", str(r)[:400])
+        check("copy: subfolder kept", (out / "sub" / "d.dwg").exists(), str(list(out.rglob("*"))))
+        check("copy: same DWG version", all(header(f) == version for f in out.rglob("*.dwg")), str(version))
+        check("copy: originals unchanged, no .bak or .dwl",
+              all((folder / n).stat().st_size == sample(year).stat().st_size for n in ("a.dwg", "b.dwg", "c.dwg"))
+              and not list(folder.rglob("*.bak")) and not list(folder.rglob("*.dwl*")), str(list(folder.rglob("*"))))
+        ok, r = await call(session, "batch_run", {"folder": str(out), "recursive": True, "autocad_version": year,
+                                                  "steps": [{"tool": "find_entities", "args": {"layers": ["MCP_BATCH"]}}]})
+        check("copy: the saved drawings hold the change", ok and r["ok_files"] == 4
+              and all(f["steps"][0]["result"]["total"] == 1 for f in r["files"]), str(r)[:300])
+
+        ok, text = await call(session, "batch_run", {"folder": str(folder), "steps": change, "save": "copy",
+                                                     "output_folder": str(out), "autocad_version": year})
+        check("copy: existing files refused without overwrite", not ok and "overwrite" in str(text), str(text)[:200])
+        ok, r = await call(session, "batch_run", {"files": [str(folder / "a.dwg")], "save": "copy", "output_folder": str(out),
+                                                  "overwrite": True, "autocad_version": year,
+                                                  "steps": [{"tool": "create_circle", "args": {"center": [0, 0], "radius": 3}}]})
+        check("copy: overwrite replaces", ok and r["saved_files"] == 1, str(r)[:300])
+
+        # a failed step: nothing saved (without continue_on_error)
+        ok, r = await call(session, "batch_run", {"files": [str(folder / "b.dwg")], "save": "in_place", "confirm": True,
+                                                  "autocad_version": year,
+                                                  "steps": [change[1], {"tool": "get_table"}]})
+        f = r["files"][0] if ok else {}
+        check("failed step: not saved", ok and not f.get("ok") and not f.get("saved_to")
+              and (folder / "b.dwg").stat().st_size == sample(year).stat().st_size and not (folder / "b.bak").exists(),
+              str(r)[:300])
+
+        # in place with .bak; a read-only file and a locked file are skipped
+        ro = folder / "c.dwg"
+        os.chmod(ro, 0o444)
+        import win32file
+        handle = win32file.CreateFile(str(folder / "sub" / "d.dwg"), win32file.GENERIC_READ, 0, None,
+                                      win32file.OPEN_EXISTING, 0, None)
+        try:
+            ok, r = await call(session, "batch_run", {"folder": str(folder), "recursive": True, "save": "in_place",
+                                                      "confirm": True, "steps": change, "autocad_version": year})
+        finally:
+            handle.Close()
+            os.chmod(ro, 0o666)
+        if ok:
+            by = {Path(f["file"]).name: f for f in r["files"]}
+            check("in place: a.dwg saved with .bak", by["a.dwg"].get("saved_to") and by["a.dwg"].get("backup")
+                  and (folder / "a.bak").exists() and header(folder / "a.dwg") == version, json.dumps(by["a.dwg"])[:300])
+            check("in place: read-only file skipped", "read-only" in str(by["c.dwg"].get("skipped")), json.dumps(by["c.dwg"])[:200])
+            check("in place: file in use skipped", "in use" in str(by["d.dwg"].get("skipped")), json.dumps(by["d.dwg"])[:200])
+            check("in place: no .dwl left", not list(folder.rglob("*.dwl*")), str(list(folder.rglob("*.dwl*"))))
+        else:
+            check("in place batch ran", False, str(r)[:300])
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
+
+
 async def refusals(session) -> None:
     print("== refusals (no console starts)")
     folder = WORK if WORK.exists() else Path(tempfile.gettempdir())
     cases = [
         ("change refused", {"folder": str(folder), "steps": [{"tool": "create_line", "args": {"start": [0, 0], "end": [1, 1]}}]},
-         "only reads"),
+         "where to save"),
         ("purge without dry_run refused", {"folder": str(folder), "steps": [{"tool": "purge", "args": {"dry_run": False}}]},
-         "only reads"),
-        ("audit fix refused", {"folder": str(folder), "steps": [{"tool": "audit", "args": {"fix": True}}]}, "only reads"),
+         "where to save"),
+        ("audit fix refused", {"folder": str(folder), "steps": [{"tool": "audit", "args": {"fix": True}}]}, "where to save"),
+        ("in_place needs confirm", {"folder": str(folder), "save": "in_place",
+                                    "steps": [{"tool": "create_layer", "args": {"name": "X"}}]}, "confirm: true"),
+        ("copy needs output_folder", {"folder": str(folder), "save": "copy",
+                                      "steps": [{"tool": "create_layer", "args": {"name": "X"}}]}, "output_folder"),
+        ("copy into the drawings' own folder", {"folder": str(folder), "save": "copy", "output_folder": str(folder),
+                                                "steps": [{"tool": "create_layer", "args": {"name": "X"}}]}, "own folder"),
+        ("bad save value", {"folder": str(folder), "save": "somewhere",
+                            "steps": [{"tool": "create_layer", "args": {"name": "X"}}]}, "must be"),
         ("zoom refused", {"folder": str(folder), "steps": [{"tool": "zoom"}]}, "cannot run in a batch"),
         ("run_command refused", {"folder": str(folder), "steps": [{"tool": "run_command", "args": {"command": "REGEN"}}]},
          "cannot run in a batch"),
@@ -232,6 +311,7 @@ async def main_async(years: list[str]) -> None:
                     print(f"== AutoCAD {year}: SKIPPED (not installed)")
                     continue
                 await run_year(session, year)
+                await writes(session, year)
             if WORK.exists():
                 await open_in_autocad(session, next(y for y in reversed(years) if sample(y).exists()))
             await refusals(session)
