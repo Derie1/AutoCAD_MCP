@@ -465,13 +465,25 @@ internal sealed class BatchRunner(JsonArray tools)
         bool[] hadLock = locks.Select(File.Exists).ToArray();
         try
         {
-            return await Start(psi, file, resultFile, timeoutSeconds, sw, ct, () =>
+            void Exited()
             {
                 if (held != null && Directory.Exists(Path.Combine(profile, "Roaming")))
                     try { File.WriteAllText(ready, DateTime.Now.ToString("s")); } catch (IOException) { }
                 for (int k = 0; k < locks.Length; k++)
                     if (!hadLock[k] && File.Exists(locks[k])) try { File.Delete(locks[k]); } catch (IOException) { }
-            });
+            }
+            var o = await Start(psi, file, resultFile, timeoutSeconds, sw, ct, Exited);
+            // A console that ended without a result (not stopped by the timeout or a cancel) is started once more:
+            // seen once in many runs, not reproducible. Not in place: that drawing may already have been saved.
+            if (o["no_result"] != null && job.Mode != SaveMode.InPlace && !ct.IsCancellationRequested)
+            {
+                var first = o["console_output"]?.ToString();
+                o = await Start(psi, file, resultFile, timeoutSeconds, sw, ct, Exited);
+                o["retried"] = true;
+                o["first_attempt_output"] = first;
+            }
+            o.Remove("no_result");
+            return o;
         }
         finally { held?.Release(); }
     }
@@ -526,7 +538,11 @@ internal sealed class BatchRunner(JsonArray tools)
                 : text.Contains("MCPBATCH", StringComparison.OrdinalIgnoreCase) && text.Contains("Unknown command", StringComparison.OrdinalIgnoreCase)
                     ? "the installed AutoCAD MCP plugin has no batch mode (older than 0.6.2) or did not load; reinstall it"
                     : $"the console ended without a result (exit code {proc.ExitCode}); the drawing may be damaged or not a DWG";
-            if (stopped == null) o["console_output"] = text;
+            if (stopped == null)
+            {
+                o["console_output"] = text;
+                if (o["error"]!.ToString().Contains("without a result")) o["no_result"] = true; // RunFile retries once
+            }
         }
         o["ms"] = sw.ElapsedMilliseconds;
         return o;

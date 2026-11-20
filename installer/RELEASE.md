@@ -14,16 +14,20 @@
 Плагин работает внутри AutoCAD и включается только по вашей команде; связь идёт лишь внутри
 компьютера (localhost).
 
-**Новое в 0.6.0:**
-- **Команды AutoCAD и AutoLISP — по вашему разрешению.** Ассистент может выполнить любую команду AutoCAD
-  с ответами на её запросы и вычислить выражение AutoLISP (в том числе вызвать ваши функции LISP) и
-  получить результат.
-- По умолчанию это **выключено**. Включается кнопкой **Commands** на панели **AI companion** (или командой
-  `MCPCOMMANDS`) после предупреждения; действует до закрытия AutoCAD, повторное нажатие выключает.
-- Опасные команды (выход из AutoCAD, закрытие чертежей, загрузка программ, запуск внешних программ) не
-  выполняются. Каждый вызов отменяется одним шагом.
-- Исправлено: если другая программа передала чертежу команду через COM, ассистент больше не зависает на
-  отмене изменений.
+**Новое в 0.7.0 — пакетная обработка папок:**
+- Ассистент прогоняет одни и те же действия по всей папке чертежей **без окна AutoCAD**: проверка слоёв и
+  атрибутов, аудит, очистка, замена атрибутов, печать в PDF. На каждый чертёж запускается консольный
+  AutoCAD (AcCoreConsole), несколько одновременно; открытый AutoCAD не нужен, ваша работа в нём не
+  прерывается. Примерно 3–4 секунды на чертёж.
+- Проверки и печать ничего не меняют: чертежи открываются только для чтения.
+- Изменённые чертежи сохраняются **только так, как вы скажете**: копиями в отдельную папку (исходники не
+  трогаются) или поверх исходников — тогда рядом остаётся прежняя версия `.bak`. Если вы не сказали,
+  ассистент спросит. Версия DWG не меняется; занятые и защищённые от записи файлы пропускаются.
+- Команды AutoCAD и AutoLISP в пакете — только если в `config.json` стоит `"allowCommands": true`.
+- Длинный пакет можно отслеживать и остановить.
+
+*В 0.6.0:* команды AutoCAD и AutoLISP по вашему разрешению (кнопка **Commands**); исправлено зависание
+отмены после команды, переданной чертежу другой программой через COM.
 
 *В 0.5.0:* создание, открытие, сохранение (в том числе в старые DWG и DXF) и закрытие чертежей; печать
 листов в PDF; внешние ссылки; очистка и аудит; перенос стандартов из шаблона.
@@ -66,6 +70,11 @@ Claude Desktop, Claude Code и Codex.
 **Команды и AutoLISP** (только с вашего разрешения)
 Любая команда AutoCAD с ответами на запросы и текстом командной строки; выражения AutoLISP с результатом.
 
+**Пакетная обработка**
+Те же действия по папке чертежей без окна AutoCAD, несколько чертежей одновременно; отчёт по каждому
+файлу; изменённые чертежи — копиями в другую папку или поверх с `.bak`, по вашему выбору; PDF на каждый
+чертёж или лист.
+
 **Просмотр**
 Снимок вида в картинку (ассистент видит чертёж), показать всё / рамку / объекты, переход между листами.
 
@@ -77,7 +86,8 @@ Claude Desktop, Claude Code и Codex.
 Каждое изменение ассистента отменяется одним шагом, и отменяются только его изменения, а не ваши.
 Массовые изменения — только после подтверждения, с предварительным просмотром. Объекты на
 заблокированных слоях и заблокированные ячейки таблиц (в том числе связанные с Excel) не изменяются.
-Команды AutoCAD и AutoLISP ассистент выполняет только после вашего разрешения.
+Команды AutoCAD и AutoLISP ассистент выполняет только после вашего разрешения. Пакетная обработка
+меняет файлы на диске только после вашего выбора, куда сохранять.
 
 **Управление**
 Панель **AI companion** на вкладке «Главная»: кнопки **Start**, **Stop**, **Status** и переключатель
@@ -142,16 +152,20 @@ and the assistant reads the drawing and makes the changes through the plugin's t
 The plugin runs inside AutoCAD and starts only on your command; it talks only within this
 computer (localhost).
 
-**New in 0.6.0:**
-- **AutoCAD commands and AutoLISP — with your permission.** The assistant can run any AutoCAD command
-  with the answers to its prompts and evaluate an AutoLISP expression (your own LISP functions too) and
-  get the result.
-- This is **off** by default. Turn it on with the **Commands** button on the **AI companion** panel (or the
-  `MCPCOMMANDS` command) after a warning; it lasts until AutoCAD is closed, pressing again turns it off.
-- Dangerous commands (quitting AutoCAD, closing drawings, loading programs, starting external programs)
-  are refused. Each call is undone in one step.
-- Fixed: after another program sent a command to a drawing through COM, undoing the assistant's changes
-  no longer hangs.
+**New in 0.7.0 — batch processing of folders:**
+- The assistant runs the same actions over a whole folder of drawings **without an AutoCAD window**:
+  checking layers and attributes, audit, purge, replacing attributes, printing to PDF. Each drawing gets
+  its own console AutoCAD (AcCoreConsole), several at once; AutoCAD does not need to be open, and your
+  work in it is not interrupted. About 3-4 seconds per drawing.
+- Checks and printing change nothing: the drawings are opened read-only.
+- Changed drawings are saved **only the way you say**: as copies in another folder (the originals stay as
+  they are) or over the originals, keeping the previous version as `.bak`. If you have not said, the
+  assistant asks. The DWG version is kept; files in use or read-only are skipped.
+- AutoCAD commands and AutoLISP in batches only with `"allowCommands": true` in `config.json`.
+- A long batch can be followed and stopped.
+
+*In 0.6.0:* AutoCAD commands and AutoLISP with your permission (the **Commands** button); fixed the undo
+hang after another program sent a command to a drawing through COM.
 
 *In 0.5.0:* creating, opening, saving (older DWG versions and DXF too) and closing drawings; printing
 layouts to PDF; external references; purge and audit; standards from a template.
@@ -194,6 +208,11 @@ external references, purge, audit, standards from a template.
 **Commands and AutoLISP** (only with your permission)
 Any AutoCAD command with the answers to its prompts and the command-line text; AutoLISP expressions with their result.
 
+**Batch processing**
+The same actions over a folder of drawings without an AutoCAD window, several drawings at once; a report
+per file; changed drawings saved as copies in another folder or over the originals with `.bak`, as you
+choose; a PDF per drawing or per layout.
+
 **Viewing**
 A picture of the view (the assistant sees the drawing), zoom to extents / window / objects, switching layouts.
 
@@ -205,7 +224,8 @@ dimension settings, move, copy, rotate, scale, mirror, delete, layer management.
 Every change the assistant makes is undone in one step, and only its own changes are undone, never
 yours. Bulk changes need confirmation and can be previewed first. Objects on locked layers and
 locked table cells (including cells linked to Excel) are never changed. The assistant runs AutoCAD
-commands and AutoLISP only after you allow it.
+commands and AutoLISP only after you allow it. Batch processing changes files on disk only after you
+chose where to save them.
 
 **Control**
 The **AI companion** panel on the **Home** tab: **Start**, **Stop**, **Status** buttons and the **Commands**

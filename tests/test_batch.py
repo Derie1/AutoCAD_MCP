@@ -108,7 +108,9 @@ async def run_year(session, year: str) -> None:
                                               "autocad_version": year})
     check("read batch: done", ok and r["status"] == "done", str(r)[:300])
     if ok:
-        check("read batch: 3 files ok", r["total_files"] == 3 and r["ok_files"] == 3, json.dumps(r)[:300])
+        check("read batch: 3 files ok", r["total_files"] == 3 and r["ok_files"] == 3,
+              json.dumps([{k: v for k, v in f.items() if k != "steps"} | {"failed_steps": [x for x in f.get("steps") or [] if not x["ok"]]}
+                          for f in r["files"] if not f["ok"]])[:3000])
         check("read batch: the asked AutoCAD", r["autocad_version"] == year, str(r.get("autocad_version")))
         f0 = r["files"][0]
         check("read batch: per-step results", len(f0["steps"]) == 5 and all(s["ok"] for s in f0["steps"])
